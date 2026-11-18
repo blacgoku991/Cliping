@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Activity, Clapperboard, Flame, Layers, Radio, Send, Sparkles, Trophy } from "lucide-react";
+import { Activity, CalendarClock, Clapperboard, Flame, Layers, Radio, Send, Sparkles, Trophy } from "lucide-react";
 import { SourceIcon } from "@/components/brand";
 import { ActivityByDay, CountUp, IntensityChart, ScoreHistogram, Sparkline, type IntensityData } from "@/components/charts";
 import { AutoRefresh } from "@/components/client";
 import { DashboardStage, type StageClip } from "@/components/dashboard-stage";
+import { PublishTimeline } from "@/components/publish-timeline";
 import { Card, CardHeader, LinkButton, LiveBadge, Notice, cx } from "@/components/ui";
 import { db } from "@/lib/db";
 import { ago, clock, duration } from "@/lib/format";
@@ -97,6 +98,22 @@ export default async function Dashboard() {
     recording: { select: { author: true } },
   } as const;
 
+  const [socialAccounts, timelinePubs] = await Promise.all([
+    db.socialAccount.findMany({ where: { userId: user.id }, orderBy: [{ platform: "asc" }, { createdAt: "asc" }], select: { id: true, platform: true, displayName: true, handle: true, valid: true } }),
+    db.publication.findMany({
+      where: {
+        userId: user.id,
+        status: { not: "CANCELED" },
+        OR: [
+          { scheduledAt: { gte: new Date(now - 13 * 3_600_000), lte: new Date(now + 73 * 3_600_000) } },
+          { publishedAt: { gte: new Date(now - 13 * 3_600_000) } },
+        ],
+      },
+      orderBy: { scheduledAt: "asc" },
+      take: 400,
+      select: { id: true, accountId: true, clipId: true, title: true, status: true, scheduledAt: true, publishedAt: true, clip: { select: { hasFinal: true, renderedAt: true } } },
+    }),
+  ]);
   const [streamerCount, accounts, worker, toReview, queued, recordings, queue, bestRecent, latest, made14, posted14, scores30, byStreamer, postedByStreamer, captured] = await Promise.all([
     db.streamer.count({ where: { userId: user.id } }),
     db.socialAccount.count({ where: { userId: user.id } }),
@@ -253,6 +270,27 @@ export default async function Dashboard() {
               );
             })}
           </div>
+        </section>
+      ) : null}
+
+      {/* Planning des publications, compte par compte */}
+      {socialAccounts.length > 0 ? (
+        <section className="mt-8" aria-labelledby="planning-title">
+          <h2 id="planning-title" className="mb-3 flex items-center gap-2 text-lg font-semibold"><CalendarClock className="size-5 text-brand" /> Planning des publications</h2>
+          <Card className="glass overflow-hidden">
+            <PublishTimeline
+              accounts={socialAccounts}
+              pubs={timelinePubs.map((p) => ({
+                id: p.id,
+                accountId: p.accountId,
+                clipId: p.clipId,
+                title: p.title,
+                status: p.status,
+                at: (p.status === "PUBLISHED" && p.publishedAt ? p.publishedAt : p.scheduledAt).getTime(),
+                thumb: p.clip.hasFinal ? `/api/media/${p.clipId}/thumb.jpg?v=${p.clip.renderedAt?.getTime() ?? 0}` : null,
+              }))}
+            />
+          </Card>
         </section>
       ) : null}
 

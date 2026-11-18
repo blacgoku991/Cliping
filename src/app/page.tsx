@@ -67,7 +67,7 @@ export default async function Home() {
   const user = await getUser();
   return (
     <div className="grid-glow min-h-dvh">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <Logo />
         <nav className="flex items-center gap-2">
           {user ? (
