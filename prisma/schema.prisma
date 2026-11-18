@@ -17,6 +17,8 @@ model User {
   name         String?
   /// Préférences de clipping (voir src/lib/settings.ts)
   settings     Json     @default("{}")
+  /// Coach : liste de contrôle cochée, brouillons de profil (voir src/lib/coach)
+  coach        Json     @default("{}")
   createdAt    DateTime @default(now())
 
   sessions     Session[]
@@ -165,6 +167,8 @@ model Clip {
   /// Transcription mot à mot [{w, s, e}] relative au début de source.mp4
   transcript  Json?
   captions    Boolean      @default(true)
+  /// Kit de publication généré par le coach (légendes, commentaires à épingler…), voir src/lib/coach
+  publishKit  Json?
 
   /// Noms de fichiers relatifs au dossier du clip
   hasFinal    Boolean      @default(false)
@@ -204,6 +208,8 @@ model SocialAccount {
   scopes          String         @default("")
   /// Faux = le jeton a été révoqué ou n'a pas pu être rafraîchi : reconnexion requise
   valid           Boolean        @default(true)
+  /// Profil proposé par le coach (bios, idées de nom) et ce qui a servi à le générer
+  profileKit      Json?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 

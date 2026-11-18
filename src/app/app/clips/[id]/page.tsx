@@ -7,6 +7,7 @@ import { SocialIcon, SourceIcon } from "@/components/brand";
 import { AutoRefresh, ConfirmButton, LocalTime } from "@/components/client";
 import { clipStatus } from "@/components/clip-card";
 import { ClipEditor } from "@/components/clip-editor";
+import { PublishKitCard } from "@/components/publish-kit";
 import { PublishPanel } from "@/components/publish-panel";
 import { Badge, Button, Card, CardHeader, Notice, ScoreBadge, buttonClass, type Tone } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -235,6 +236,8 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
               </ul>
             ) : null}
           </Card>
+
+          <PublishKitCard clipId={clip.id} userId={user.id} currentTitle={clip.title} disabled={clip.status === "PROCESSING"} />
         </div>
       </div>
     </>
