@@ -4,7 +4,7 @@ import { Check, ExternalLink, Lightbulb } from "lucide-react";
 import { startTransition, useOptimistic } from "react";
 import { toggleCoachItem } from "@/app/actions/coach";
 import { GUIDE, type GuideItem } from "@/lib/coach/guide";
-import { SOURCES } from "@/lib/coach/sources";
+import { SOURCES, shortLabel } from "@/lib/coach/sources";
 import { Badge, Card, cx } from "../ui";
 import { THEME_ICONS } from "./icons";
 
@@ -138,7 +138,7 @@ function ChecklistItem({ item, done, onToggle }: { item: GuideItem; done: boolea
               const s = SOURCES[id];
               return (
                 <a key={id} href={s.url} target="_blank" rel="noreferrer" title={s.label} className="inline-flex items-center gap-1 text-faint hover:text-brand">
-                  <ExternalLink className="size-3" /> {s.publisher}
+                  <ExternalLink className="size-3" /> {shortLabel(s)}
                 </a>
               );
             })}

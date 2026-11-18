@@ -119,6 +119,41 @@ export const SOURCES = {
     url: "https://ads.tiktok.com/business/en-US/blog/how-to-use-content-scheduling-platform",
     official: true,
   },
+  ttHowRecommends: {
+    id: "ttHowRecommends",
+    label: "TikTok Newsroom — How TikTok recommends videos #ForYou",
+    publisher: "TikTok",
+    url: "https://newsroom.tiktok.com/en-us/how-tiktok-recommends-videos-for-you",
+    official: true,
+  },
+  ttRecoSystem: {
+    id: "ttRecoSystem",
+    label: "TikTok Transparence — Introduction au système de recommandation",
+    publisher: "TikTok",
+    url: "https://www.tiktok.com/transparency/en/recommendation-system",
+    official: true,
+  },
+  ytRecoBlog: {
+    id: "ytRecoBlog",
+    label: "Blog YouTube — On YouTube's recommendation system",
+    publisher: "YouTube",
+    url: "https://blog.youtube/inside-youtube/on-youtubes-recommendation-system/",
+    official: true,
+  },
+  ytRecoHelp: {
+    id: "ytRecoHelp",
+    label: "Aide YouTube — Le système de recommandation de YouTube",
+    publisher: "YouTube",
+    url: "https://support.google.com/youtube/answer/16533387",
+    official: true,
+  },
+  ytReach: {
+    id: "ytReach",
+    label: "Aide YouTube — Portée et engagement (« Affichées dans le flux », « Regardées / balayées »)",
+    publisher: "YouTube",
+    url: "https://support.google.com/youtube/answer/12220281",
+    official: true,
+  },
   rockstar: {
     id: "rockstar",
     label: "Rockstar Games — site officiel (date de sortie et annonces)",
@@ -129,3 +164,10 @@ export const SOURCES = {
 } as const satisfies Record<string, Source>;
 
 export type SourceId = keyof typeof SOURCES;
+
+/** Libellé court d'une source pour les liens en ligne (« YouTube · Règles relatives aux hashtags »). */
+export function shortLabel(s: Source): string {
+  const title = s.label.split(" — ").slice(1).join(" — ") || s.label;
+  const cut = title.replace(/\s*\(.*\)$/, "");
+  return `${s.publisher} · ${cut.length > 42 ? cut.slice(0, 41).trimEnd() + "…" : cut}`;
+}
