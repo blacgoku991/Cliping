@@ -205,9 +205,15 @@ export class LiveRecorder {
       if (ended) this.queue(this.detector.flush());
       await this.cutReady(ended);
       await this.prune();
-      if (Date.now() - this.lastDbUpdate > 30_000) {
+      if (Date.now() - this.lastDbUpdate > 10_000) {
         this.lastDbUpdate = Date.now();
-        await db.recording.update({ where: { id: this.target.recordingId }, data: { durationSec: this.timeline } }).catch(() => {});
+        // Courbe d'intensité des 10 dernières minutes (un point toutes les 2 s), affichée sur le tableau de bord.
+        const n = this.detector.length;
+        const from = Math.max(0, n - 600);
+        const points: number[] = [];
+        for (let i = from; i < n; i += 2) points.push(Math.round(this.detector.smoothedAt(i) * 100) / 100);
+        const intensity = { from, step: 2, threshold: thresholdForSensitivity(this.target.settings.sensitivity), points };
+        await db.recording.update({ where: { id: this.target.recordingId }, data: { durationSec: this.timeline, intensity } }).catch(() => {});
       }
       if (ended) await this.finalize();
     } catch (err) {

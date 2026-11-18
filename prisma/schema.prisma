@@ -109,6 +109,8 @@ model Recording {
   progress    Float           @default(0)
   /// Options d'import (plage, nombre max de clips…)
   options     Json            @default("{}")
+  /// Courbe du score du détecteur sur les dernières minutes {from, step, threshold, points[]} (lives en cours)
+  intensity   Json?
   error       String?
   startedAt   DateTime        @default(now())
   endedAt     DateTime?

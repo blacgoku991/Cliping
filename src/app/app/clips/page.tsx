@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
-import { Clapperboard } from "lucide-react";
+import { Clapperboard, Layers } from "lucide-react";
 import { AutoRefresh } from "@/components/client";
-import { ClipCard } from "@/components/clip-card";
+import { clipStatus } from "@/components/clip-card";
+import { ClipTile } from "@/components/clip-tile";
 import { Card, EmptyState, LinkButton, PageHeader, cx } from "@/components/ui";
 import { db } from "@/lib/db";
+import { ago, clock } from "@/lib/format";
 import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Clips" };
@@ -60,7 +62,11 @@ export default async function ClipsPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <AutoRefresh seconds={10} />
-      <PageHeader title="Clips" subtitle="Les moments forts repérés par le bot, déjà montés. Ouvre un clip pour le retoucher et le publier." />
+      <PageHeader
+        title="Clips"
+        subtitle="Les moments forts repérés par le bot, déjà montés. Survole un clip pour le voir bouger, ouvre-le pour le retoucher et le publier."
+        action={counts[0] ? <LinkButton href="/app/review" variant="primary"><Layers className="size-4" /> Mode validation · {counts[0]}</LinkButton> : undefined}
+      />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1 overflow-x-auto rounded-xl border border-line bg-surface p-1" role="tablist">
@@ -101,7 +107,28 @@ export default async function ClipsPage({ searchParams }: { searchParams: Promis
         </Card>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-          {clips.slice(0, PAGE_SIZE).map((c) => <ClipCard key={c.id} clip={c} />)}
+          {clips.slice(0, PAGE_SIZE).map((c) => {
+            const st = clipStatus(c);
+            return (
+              <ClipTile
+                key={c.id}
+                clip={{
+                  id: c.id,
+                  status: c.status,
+                  title: c.title,
+                  score: c.score,
+                  durationLabel: clock(c.endSec - c.startSec),
+                  agoLabel: ago(c.createdAt),
+                  hasFinal: c.hasFinal,
+                  version: c.renderedAt?.getTime() ?? 0,
+                  author: c.streamer?.displayName ?? c.recording?.author ?? "Import",
+                  platform: c.streamer?.platform ?? null,
+                  statusLabel: st.label,
+                  statusTone: st.tone,
+                }}
+              />
+            );
+          })}
         </div>
       )}
 
