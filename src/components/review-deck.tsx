@@ -230,7 +230,7 @@ export function ReviewDeck({ initial, startId, processing, sort }: { initial: Re
       <div aria-hidden className="hero-glow pointer-events-none absolute inset-0 opacity-70" />
 
       {/* Barre du haut */}
-      <header className="relative z-10 flex items-center gap-3 border-b border-line/70 px-3 py-2.5 sm:px-5">
+      <header className="relative z-10 flex items-center gap-3 border-b border-line/70 px-3 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] sm:px-5">
         <Link href="/app" className="grid size-9 shrink-0 place-items-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-ink" aria-label="Quitter le mode validation">
           <X className="size-5" />
         </Link>
