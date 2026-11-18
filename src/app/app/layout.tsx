@@ -29,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     db.publication.count({ where: { userId: user.id, status: "FAILED" } }),
     getWorkerStatus(),
   ]);
-  const badges = { "/app/clips": toReview, "/app/queue": failedPubs };
+  const badges = { "/app/review": toReview, "/app/queue": failedPubs };
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[250px_1fr]">

@@ -7,6 +7,7 @@ import { SocialIcon, SourceIcon } from "@/components/brand";
 import { AutoRefresh, ConfirmButton, LocalTime } from "@/components/client";
 import { clipStatus } from "@/components/clip-card";
 import { ClipEditor } from "@/components/clip-editor";
+import { PhonePreview } from "@/components/phone-preview";
 import { PublishKitCard } from "@/components/publish-kit";
 import { PublishPanel } from "@/components/publish-panel";
 import { Badge, Button, Card, CardHeader, Notice, ScoreBadge, buttonClass, type Tone } from "@/components/ui";
@@ -77,28 +78,16 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
       <div className="grid gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         {/* Colonne vidéo */}
         <div className="space-y-4 lg:sticky lg:top-8 lg:self-start">
-          <div className="relative mx-auto aspect-[9/16] w-full max-w-[340px] overflow-hidden rounded-2xl border border-line bg-black">
-            {clip.hasFinal ? (
-              <video
-                key={version}
-                controls
-                playsInline
-                preload="metadata"
-                poster={`/api/media/${clip.id}/thumb.jpg?v=${version}`}
-                src={`/api/media/${clip.id}/final.mp4?v=${version}`}
-                className="size-full"
-              />
-            ) : (
-              <div className="grid size-full place-items-center px-6 text-center text-sm text-muted">
-                {clip.status === "FAILED" ? "Le montage a échoué." : <span className="flex flex-col items-center gap-3"><Loader2 className="size-7 animate-spin" />Montage en cours…</span>}
-              </div>
-            )}
-            {busy && clip.hasFinal ? (
-              <div className="absolute inset-x-3 top-3 flex items-center gap-2 rounded-xl bg-black/80 px-3 py-2 text-xs font-medium backdrop-blur">
+          <PhonePreview
+            clip={{ id: clip.id, title: clip.title, hashtags: clip.hashtags, author, hasFinal: clip.hasFinal, version }}
+            size="lg"
+            empty={clip.status === "FAILED" ? "Le montage a échoué." : <span className="flex flex-col items-center gap-3"><Loader2 className="size-7 animate-spin" />Montage en cours…</span>}
+            overlayBadge={busy && clip.hasFinal ? (
+              <div className="flex items-center gap-2 rounded-xl bg-black/80 px-3 py-2 text-xs font-medium backdrop-blur">
                 <Loader2 className="size-3.5 animate-spin" /> Remontage en cours…
               </div>
-            ) : null}
-          </div>
+            ) : undefined}
+          />
 
           <div className="mx-auto flex max-w-[340px] flex-wrap gap-2">
             {clip.hasFinal ? (
