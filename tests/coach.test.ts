@@ -306,3 +306,21 @@ describe("créneau conseillé", () => {
     expect(slot.toISOString()).toBe("2026-11-19T00:00:00.000Z");
   });
 });
+
+describe("fiches plateformes", () => {
+  it("citent des sources existantes et ne présentent comme officiel que du sourcé", async () => {
+    const { FORMATS, MEMO, DIFFERENCES, SCALE_RULES } = await import("@/lib/coach/platforms");
+    const points = [
+      ...FORMATS.flatMap((f) => [...f.signals, ...f.implications, ...f.mistakes]),
+      ...MEMO.flatMap((r) => [r.tiktok, r.shorts]),
+      ...DIFFERENCES,
+      ...SCALE_RULES,
+    ];
+    expect(FORMATS.map((f) => f.id)).toEqual(["tiktok", "shorts", "youtube"]);
+    for (const p of points) {
+      for (const s of p.sources ?? []) expect(SOURCES[s]).toBeDefined();
+      if (p.basis === "official") expect(p.sources?.length ?? 0).toBeGreaterThan(0);
+      expect(p.text).not.toMatch(/\d+\s?%/);
+    }
+  });
+});
