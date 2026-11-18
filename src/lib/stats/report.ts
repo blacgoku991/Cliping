@@ -99,16 +99,21 @@ export interface PerformanceReport {
     hooks: DimensionResult;
   };
   untracked: { draft: number; noScope: number; noId: number; notFound: number; pending: number; unsupported: number };
+  /** Compilations en ligne sur la période : hors des comparaisons (format différent) */
+  compilations: number;
 }
 
 const MILESTONES = [1, 6, 24];
 
 async function loadPublications(userId: string, opts: ReportOptions) {
-  return db.publication.findMany({
+  // Uniquement les publications de clips : une compilation horizontale de plusieurs minutes ne se compare pas
+  // à un clip vertical de 30 s, elle fausserait les médianes et les constats.
+  const rows = await db.publication.findMany({
     where: {
       userId,
       status: "PUBLISHED",
       publishedAt: { not: null },
+      clipId: { not: null },
       ...(opts.accountId ? { accountId: opts.accountId } : {}),
     },
     include: {
@@ -129,6 +134,7 @@ async function loadPublications(userId: string, opts: ReportOptions) {
     },
     orderBy: { publishedAt: "desc" },
   });
+  return rows.filter((p): p is typeof p & { clipId: string; clip: NonNullable<typeof p.clip> } => p.clipId !== null && p.clip !== null);
 }
 
 type LoadedPub = Awaited<ReturnType<typeof loadPublications>>[number];
@@ -299,5 +305,14 @@ export async function performanceReport(userId: string, opts: ReportOptions = {}
     ),
   };
 
-  return { timeZone, totals, gained, accounts, days: dayEnds.map((t) => new Date(t).toISOString()), timeline, top, launches, insights, untracked };
+  const compilations = await db.publication.count({
+    where: {
+      userId,
+      status: "PUBLISHED",
+      compilationId: { not: null },
+      ...(opts.accountId ? { accountId: opts.accountId } : {}),
+      ...(opts.sinceDays ? { publishedAt: { gte: new Date(now - opts.sinceDays * DAY) } } : { publishedAt: { not: null } }),
+    },
+  });
+  return { timeZone, totals, gained, accounts, days: dayEnds.map((t) => new Date(t).toISOString()), timeline, top, launches, insights, untracked, compilations };
 }

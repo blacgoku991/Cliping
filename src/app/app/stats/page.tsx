@@ -143,6 +143,12 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
           reliée à rien de ce que TikTok nous renvoie. Elles ne comptent pas dans les chiffres ci-dessous (plutôt que d&apos;afficher des zéros).
         </Notice>
       ) : null}
+      {report.compilations > 0 ? (
+        <Notice>
+          <strong>{report.compilations} compilation{report.compilations > 1 ? "s" : ""} en ligne</strong> : {report.compilations > 1 ? "elles ne sont" : "elle n'est"} pas
+          comptée{report.compilations > 1 ? "s" : ""} ici. Un best-of horizontal de plusieurs minutes ne se compare pas à un clip vertical ; ses chiffres sont à suivre dans YouTube Studio.
+        </Notice>
+      ) : null}
       {untracked.unsupported > 0 ? (
         <Notice>
           <strong>{untracked.unsupported} publication{untracked.unsupported > 1 ? "s" : ""} Instagram</strong> ne {untracked.unsupported > 1 ? "sont" : "est"} pas

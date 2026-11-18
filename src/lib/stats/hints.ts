@@ -67,7 +67,8 @@ export async function performanceHints(userId: string, opts: { timeZone?: string
   const stored = opts.timeZone && isValidTimeZone(opts.timeZone) ? opts.timeZone : await userTimeZone(userId);
   const timeZone = stored ?? "UTC";
   const pubs = await db.publication.findMany({
-    where: { userId, status: "PUBLISHED", publishedAt: { not: null, lte: new Date(now - COMPARE_AT_HOURS * 3600_000) } },
+    // Clips uniquement : les compilations (format long horizontal) ne se comparent pas aux clips.
+    where: { userId, status: "PUBLISHED", clipId: { not: null }, publishedAt: { not: null, lte: new Date(now - COMPARE_AT_HOURS * 3600_000) } },
     select: {
       accountId: true,
       privacy: true,
@@ -79,6 +80,7 @@ export async function performanceHints(userId: string, opts: { timeZone?: string
     },
   });
   const rows = pubs
+    .filter((p): p is typeof p & { clip: NonNullable<typeof p.clip> } => p.clip !== null)
     .filter((p) => trackability(p, p.account) === "OK" && p.stats.length > 0)
     .map((p) => ({ ...p, v24: viewsAtAge(p.publishedAt!, p.stats, COMPARE_AT_HOURS, now) }))
     .filter((p): p is typeof p & { v24: number } => p.v24 !== null);

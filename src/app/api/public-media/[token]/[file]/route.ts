@@ -21,7 +21,8 @@ async function serve(req: Request, ctx: { params: Promise<{ token: string; file:
     where: { id: check.publicationId },
     select: { clipId: true, status: true, account: { select: { platform: true } } },
   });
-  if (!pub || pub.account.platform !== "INSTAGRAM" || !["UPLOADING", "PROCESSING"].includes(pub.status)) {
+  // Seule la vidéo d'un clip est servie ici (une publication de compilation n'a pas de clip).
+  if (!pub || !pub.clipId || pub.account.platform !== "INSTAGRAM" || !["UPLOADING", "PROCESSING"].includes(pub.status)) {
     return new Response("Lien expiré", { status: 410, headers: noStore });
   }
 
