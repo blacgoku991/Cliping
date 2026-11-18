@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { enqueue } from "@/lib/jobs";
 import { PLATFORMS } from "@/lib/platforms";
+import type { Prisma } from "@prisma/client";
 import { requireUser } from "@/lib/session";
+import { CAPTION_STYLE_KEYS, effectiveEdit, parseSettings, type ClipEdit } from "@/lib/settings";
 import { clipDir, removeDir } from "@/lib/storage";
 import type { FormState } from "./auth";
 
@@ -45,13 +47,33 @@ export async function updateClip(_prev: FormState, form: FormData): Promise<Form
   if (endSec - startSec < 5) return { error: "Un clip doit durer au moins 5 secondes." };
   if (endSec - startSec > 180) return { error: "Un clip ne peut pas dépasser 3 minutes (limite des formats courts)." };
 
+  // Options de montage : on ne garde sur le clip que ce qui diffère des réglages par défaut,
+  // pour qu'un changement de défaut s'applique encore aux clips qu'on n'a pas personnalisés.
+  const defaults = parseSettings(user.settings);
+  const before = effectiveEdit(defaults, clip.edit);
+  const styleRaw = String(form.get("captionStyle") ?? before.captionStyle);
+  const after: ClipEdit = {
+    captionStyle: (CAPTION_STYLE_KEYS as readonly string[]).includes(styleRaw) ? (styleRaw as ClipEdit["captionStyle"]) : before.captionStyle,
+    coldOpen: form.get("coldOpen") === "on",
+    trimSilence: form.get("trimSilence") === "on",
+    punchZoom: form.get("punchZoom") === "on",
+    progressBar: form.get("progressBar") === "on",
+    endCard: form.get("endCard") === "on",
+  };
+  const base = effectiveEdit(defaults, {});
+  const edit: Partial<ClipEdit> = {};
+  for (const k of Object.keys(after) as Array<keyof ClipEdit>) {
+    if (after[k] !== base[k]) (edit as Record<string, unknown>)[k] = after[k];
+  }
+  const editChanged = (Object.keys(after) as Array<keyof ClipEdit>).some((k) => after[k] !== before[k]);
+
   const needsRender =
-    hook !== clip.hook || captions !== clip.captions || template !== clip.template ||
+    hook !== clip.hook || captions !== clip.captions || template !== clip.template || editChanged ||
     Math.abs(startSec - clip.startSec) > 0.05 || Math.abs(endSec - clip.endSec) > 0.05;
 
   await db.clip.update({
     where: { id },
-    data: { title, hook, description, hashtags, captions, template, startSec, endSec, error: null },
+    data: { title, hook, description, hashtags, captions, template, startSec, endSec, edit: edit as Prisma.InputJsonValue, error: null },
   });
   if (needsRender) await enqueue("clip.render", { clipId: id }, { maxAttempts: 2 });
   revalidatePath(`/app/clips/${id}`);

@@ -282,7 +282,15 @@ export function buildAss(input: AssInput): string {
 
   // ── Sous-titres ──
   const emph = new Set((input.emphasis ?? []).map(normWord).filter(Boolean));
-  const words = input.words
+  // Ponctuation transcrite comme un mot à part (« incroyable » « ! ») : on la recolle au mot précédent.
+  const glued: Word[] = [];
+  for (const x of [...input.words].sort((a, b) => a.s - b.s)) {
+    const prev = glued[glued.length - 1];
+    if (prev && !/[\p{L}\p{N}]/u.test(x.w) && x.s - prev.e < 1) {
+      glued[glued.length - 1] = { ...prev, w: `${prev.w}${/^[!?:;»]/.test(x.w.trim()) ? " " : ""}${x.w.trim()}`, e: Math.max(prev.e, x.e) };
+    } else glued.push(x);
+  }
+  const words = glued
     .map((x) => {
       const clean = cleanBurnText(x.w);
       return { w: st.upper ? clean.toUpperCase() : clean, s: x.s, e: Math.max(x.e, x.s + 0.05), strong: emph.has(normWord(x.w)) };

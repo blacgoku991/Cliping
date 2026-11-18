@@ -356,7 +356,8 @@ export function refineBounds(input: BoundsInput): { start: number; end: number; 
     let i = words.findIndex((w) => w.e > end - 0.3);
     if (i >= 0 && words[i]!.s < end + 0.6) {
       let chainEnd = words[i]!.e;
-      while (i + 1 < words.length && words[i + 1]!.s - words[i]!.e < 0.6) {
+      // La phrase s'arrête à la ponctuation finale, ou à une pause d'au moins 0,6 s.
+      while (i + 1 < words.length && !endsSentence(words[i]!.w) && words[i + 1]!.s - words[i]!.e < 0.6) {
         i++;
         chainEnd = words[i]!.e;
       }

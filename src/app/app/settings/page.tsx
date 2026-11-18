@@ -3,7 +3,7 @@ import { saveSettings } from "@/app/actions/settings";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Badge, Card, CardHeader, Field, Input, PageHeader, Select } from "@/components/ui";
 import { requireUser } from "@/lib/session";
-import { parseSettings } from "@/lib/settings";
+import { CAPTION_STYLE_KEYS, CAPTION_STYLE_LABELS, parseSettings } from "@/lib/settings";
 import { getWorkerStatus } from "@/lib/worker-status";
 
 export const metadata: Metadata = { title: "Réglages" };
@@ -66,13 +66,20 @@ export default async function SettingsPage() {
             <Field label="Zoom sur le gameplay" hint="Pour la mise en page « fond flouté ». 1 = toute la largeur du stream visible ; 1,35 = recadré pour être plus lisible sur mobile.">
               <Input name="zoom" type="number" min={1} max={2} step={0.05} defaultValue={s.zoom} />
             </Field>
-            <Field label="Police des sous-titres">
+            <Field label="Style des sous-titres" hint={CAPTION_STYLE_KEYS.map((k) => `${CAPTION_STYLE_LABELS[k].name} : ${CAPTION_STYLE_LABELS[k].hint.toLowerCase()}.`).join(" ") + " Modifiable clip par clip."}>
+              <Select name="captionStyle" defaultValue={s.captionStyle}>
+                {CAPTION_STYLE_KEYS.map((k) => (
+                  <option key={k} value={k}>{CAPTION_STYLE_LABELS[k].name}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Police du style Classique">
               <Select name="captionFont" defaultValue={s.captionFont}>
                 <option value="Poppins ExtraBold">Poppins ExtraBold (ronde)</option>
                 <option value="Anton">Anton (condensée)</option>
               </Select>
             </Field>
-            <Field label="Couleur du mot en cours">
+            <Field label="Couleur de mise en valeur" hint="Mot prononcé, mots forts, barre de progression.">
               <input type="color" name="captionColor" defaultValue={s.captionColor} className="h-10 w-full cursor-pointer rounded-xl border border-line bg-bg p-1" />
             </Field>
             <Field label="Langue des streams" hint="Utilisée pour la transcription et la rédaction des titres.">
@@ -90,6 +97,20 @@ export default async function SettingsPage() {
               <Check name="showHook" checked={s.showHook} label="Afficher l'accroche en haut de la vidéo" />
               <Check name="showCredit" checked={s.showCredit} label="Créditer le streamer sur la vidéo" hint="Recommandé : c'est la base du clipping, et ça limite les réclamations." />
             </div>
+            <div className="md:col-span-2">
+              <p className="mb-2.5 text-sm font-medium text-ink">Rythme et rétention <span className="font-normal text-muted">— les réglages par défaut, modifiables clip par clip dans l'éditeur</span></p>
+              <div className="grid gap-2.5 md:grid-cols-2">
+                <Check name="coldOpen" checked={s.coldOpen} label="Ouvrir sur le moment fort" hint="Flash d'environ 1,5 s du pic en ouverture, puis retour au début. Ignoré si le clip dure moins de 14 s ou si le pic arrive dans les 6 premières secondes." />
+                <Check name="trimSilence" checked={s.trimSilence} label="Couper les temps morts" hint="Coupes sèches dans les silences et les creux avant le pic. Jamais au milieu d'une phrase, jamais dans les 2,5 s avant le pic." />
+                <Check name="smartBounds" checked={s.smartBounds} label="Bornes intelligentes" hint="Le clip démarre sur un début de phrase et se termine après la chute ou la réaction. Appliqué à la création du clip." />
+                <Check name="punchZoom" checked={s.punchZoom} label="Zoom d'impact au moment fort" hint="Léger zoom progressif (+12 %) sur le gameplay, puis retour." />
+                <Check name="progressBar" checked={s.progressBar} label="Barre de progression" hint="Fine barre en haut de la vidéo." />
+                <Check name="endCard" checked={s.endCard} label="Carton de fin" hint="2,5 s d'appel à s'abonner avec le crédit du streamer. Désactivé par défaut : il casse la boucle de relecture, qui compte beaucoup sur TikTok et Shorts." />
+              </div>
+            </div>
+            <Field label="Texte du carton de fin" hint="40 caractères max.">
+              <Input name="endCardText" defaultValue={s.endCardText} maxLength={40} />
+            </Field>
           </div>
         </Card>
 

@@ -17,16 +17,27 @@ const server = createServer((req, res) => {
   if (req.method === "POST" && req.url?.endsWith("/audio/transcriptions")) {
     req.resume();
     req.on("end", () => {
-      const phrase = "attends attends attends c'est quoi ce truc non non non mais il est fou lui regarde ça frérot j'y crois pas c'est incroyable".split(" ");
+      // Phrases ponctuées, séparées par des pauses de longueur variable (dont de vrais blancs de 2 à 3 s),
+      // pour exercer le calage des bornes et la coupe des temps morts.
+      const sentences = [
+        "attends attends c'est quoi ce truc ?",
+        "non non non !",
+        "mais il est fou lui.",
+        "regarde ça frérot, j'y crois pas.",
+        "c'est incroyable !",
+        "bon on continue la mission.",
+        "il reste combien de temps là ?",
+      ];
+      const pauses = [0.4, 2.6, 0.9, 1.6, 3.1, 0.5, 2.2];
       const words = [];
-      // Une phrase toutes les ~12 s sur 2 minutes : assez pour couvrir n'importe quel clip de test.
-      for (let base = 2; base < 120; base += 12) {
-        let t = base;
-        for (const w of phrase) {
-          const d = 0.18 + w.length * 0.035;
+      let t = 1.2;
+      for (let i = 0; t < 130; i++) {
+        for (const w of sentences[i % sentences.length].split(" ")) {
+          const d = 0.16 + w.length * 0.035;
           words.push({ word: w, start: +t.toFixed(2), end: +(t + d).toFixed(2) });
-          t += d + 0.06;
+          t += d + 0.07;
         }
+        t += pauses[i % pauses.length];
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ text: words.map((w) => w.word).join(" "), words }));

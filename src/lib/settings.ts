@@ -108,3 +108,12 @@ export function effectiveEdit(settings: ClipSettings, raw: unknown): ClipEdit {
     endCard: own.endCard ?? settings.endCard,
   };
 }
+
+/** Résumé du dernier montage (champ JSON `montage` d'un clip), ou null s'il est absent ou illisible. */
+export function montageSummary(raw: unknown): { duration: number; teaserDur: number; removed: number; cuts: number; endCard: number } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const n = (k: string) => (typeof r[k] === "number" && Number.isFinite(r[k]) ? (r[k] as number) : 0);
+  if (!n("duration")) return null;
+  return { duration: n("duration"), teaserDur: n("teaserDur"), removed: n("removed"), cuts: n("cuts"), endCard: n("endCard") };
+}

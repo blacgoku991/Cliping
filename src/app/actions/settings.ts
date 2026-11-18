@@ -25,6 +25,14 @@ export async function saveSettings(_prev: FormState, form: FormData): Promise<Fo
     captionColor: String(form.get("captionColor") ?? "#FFE600"),
     showHook: form.get("showHook") === "on",
     showCredit: form.get("showCredit") === "on",
+    captionStyle: String(form.get("captionStyle") ?? "classic"),
+    coldOpen: form.get("coldOpen") === "on",
+    trimSilence: form.get("trimSilence") === "on",
+    smartBounds: form.get("smartBounds") === "on",
+    punchZoom: form.get("punchZoom") === "on",
+    progressBar: form.get("progressBar") === "on",
+    endCard: form.get("endCard") === "on",
+    endCardText: String(form.get("endCardText") ?? "").trim() || undefined,
     defaultHashtags: String(form.get("defaultHashtags") ?? "")
       .split(/[\s,]+/)
       .map((t) => t.replace(/^#+/, "").toLowerCase().replace(/[^a-z0-9_àâäéèêëîïôöùûüç]/g, ""))

@@ -71,7 +71,7 @@ describe("sous-titres", () => {
     expect(ass).toContain("PlayResX: 1080");
     expect(ass).toMatch(/IL S'ATTENDAIT PAS À(\\N| )ÇA/); // majuscules, accolades et emoji retirés, coupé en lignes
     expect(ass).toContain("twitch.tv/test");
-    expect(ass).toContain("{\\c&H00E6FF&}NON{\\c&HFFFFFF&}"); // #FFE600 en ordre BGR
+    expect(ass).toMatch(/\{\\c&H00E6FF&[^}]*\}NON \{\\c&HFFFFFF&/); // #FFE600 en ordre BGR, mot suivant en blanc
     expect(ass.match(/^Dialogue: 2,/gm)!.length).toBe(words.length);
     expect(ass).not.toMatch(/😱/u);
   });
@@ -102,7 +102,7 @@ describe("montage", () => {
   });
   it("produit un filtergraph par mise en page", () => {
     expect(buildFilterGraph({ ...base, template: "BLUR" })).toMatch(/gblur.*overlay.*setsar=1,ass=filename=captions\.ass/);
-    expect(buildFilterGraph({ ...base, template: "FULL", assFile: null })).toMatch(/crop=1080:1920\[base\];\[base\]setsar=1\[v\]/);
+    expect(buildFilterGraph({ ...base, template: "FULL", assFile: null })).toMatch(/crop=1080:1920\[base0\];\[base0\]null\[base\];\[base\]setsar=1\[v\]/);
     const fc = buildFilterGraph({ ...base, template: "FACECAM", facecam: { x: 0.75, y: 0.02, w: 0.23, h: 0.3 } });
     expect(fc).toMatch(/crop=w=iw\*0\.2300.*vstack/);
     // Facecam demandée sans zone définie : on retombe sur le fond flouté.
