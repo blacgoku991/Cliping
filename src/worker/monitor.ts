@@ -53,6 +53,8 @@ async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<v
 /** Surveille les chaînes suivies et démarre/arrête les enregistrements. */
 export class Monitor {
   private readonly recorders = new Map<string, LiveRecorder>();
+  /** Captures lancées pour des chaînes du mode automatique → spectateurs (pour céder la place aux chaînes manuelles) */
+  private readonly autoViewers = new Map<string, number>();
   private running = false;
   private stopped = false;
 
@@ -95,11 +97,25 @@ export class Monitor {
     if (this.stopped) return;
 
     const wanted = status.live && matchesGameFilter(streamer.gameFilter, status.category, status.title);
+    if (recorder && !recorder.done && this.autoViewers.has(streamer.id)) this.autoViewers.set(streamer.id, streamer.autoViewers ?? 0);
     if (recorder && !recorder.done) {
       if (status.live && !wanted) recorder.stop("le streamer a changé de jeu");
       return;
     }
     if (!wanted) return;
+    if (this.recorders.size >= env.worker.maxRecordings && !streamer.autoFollowed) {
+      // Les chaînes suivies à la main passent avant celles du mode automatique : on libère la place
+      // de la capture automatique la moins regardée.
+      const victim = [...this.recorders.entries()]
+        .filter(([id, r]) => this.autoViewers.has(id) && !r.done)
+        .sort(([a], [b]) => (this.autoViewers.get(a) ?? 0) - (this.autoViewers.get(b) ?? 0))[0];
+      if (victim) {
+        const [victimId, rec] = victim;
+        rec.stop(`place laissée à ${streamer.displayName} (chaîne suivie à la main)`);
+        await rec.waitDone(60_000);
+        this.recorders.delete(victimId);
+      }
+    }
     if (this.recorders.size >= env.worker.maxRecordings) {
       await db.streamer.update({
         where: { id: streamer.id },
@@ -132,9 +148,14 @@ export class Monitor {
       settings: parseSettings(user.settings),
     });
     rec.onEnd = (r) => {
-      if (this.recorders.get(streamer.id) === r) this.recorders.delete(streamer.id);
+      if (this.recorders.get(streamer.id) === r) {
+        this.recorders.delete(streamer.id);
+        this.autoViewers.delete(streamer.id);
+      }
     };
     this.recorders.set(streamer.id, rec);
+    if (streamer.autoFollowed) this.autoViewers.set(streamer.id, streamer.autoViewers ?? 0);
+    else this.autoViewers.delete(streamer.id);
     try {
       await rec.start();
     } catch (err) {

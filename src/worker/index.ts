@@ -95,6 +95,8 @@ async function discoveryLoop(): Promise<void> {
     log("discovery", "pas d'identifiants Twitch/Kick d'application : la découverte des lives est désactivée");
     return;
   }
+  // Laisse au moniteur le temps de reprendre les captures en cours avant de compter les places libres.
+  await sleep(Math.min(30, env.worker.monitorIntervalSec + 5) * 1000);
   while (!shuttingDown) {
     await refreshDiscovery().catch((err) => log("discovery", `erreur : ${err instanceof Error ? err.message : err}`));
     await sleep(DISCOVERY_INTERVAL_SEC * 1000);

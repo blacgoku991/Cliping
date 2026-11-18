@@ -89,7 +89,7 @@ export async function LiveNow({ userId, followed }: { userId: string; followed: 
         </div>
         <p className="text-xs leading-relaxed text-faint sm:col-span-2 lg:col-span-4">
           Mode automatique : le bot ajoute les plus gros lives du jeu dans cette langue et retire ceux qui sortent du classement, au plus {env.worker.maxRecordings} captures en même temps
-          (<Code>MAX_CONCURRENT_RECORDINGS</Code>), places des chaînes que tu suis à la main déduites. Tes chaînes ajoutées à la main ne sont jamais touchées, et une capture en cours n&apos;est pas coupée.
+          (<Code>MAX_CONCURRENT_RECORDINGS</Code>), places des chaînes que tu suis à la main déduites. Tes chaînes ajoutées à la main ne sont jamais touchées et passent en priorité : si l&apos;une d&apos;elles démarre un live alors que tout est pris, la capture automatique la moins regardée lui cède sa place.
         </p>
       </ActionForm>
 

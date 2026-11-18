@@ -45,12 +45,12 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
         </Notice>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {Object.values(PLATFORMS).map((p) => {
           const mine = accounts.filter((a) => a.platform === p.id);
           const ready = p.configured();
           return (
-            <Card key={p.id} className="flex flex-col">
+            <Card key={p.id} className="flex min-w-0 flex-col">
               <CardHeader
                 title={<span className="flex items-center gap-2"><SocialIcon platform={p.id} className="size-5" /> {p.label}</span>}
                 hint={`${mine.length} compte${mine.length > 1 ? "s" : ""} connecté${mine.length > 1 ? "s" : ""}`}

@@ -42,15 +42,6 @@ export interface PlanIssue {
   message: string;
 }
 
-/** Vrai si l'ensemble trié respecte le plafond glissant : cap+1 publications ne tiennent jamais dans 24 h. */
-function capViolation(sorted: number[], cap: number | null): number | null {
-  if (!cap) return null;
-  for (let j = 0; j + cap < sorted.length; j++) {
-    if (sorted[j + cap]! - sorted[j]! < DAY_MS) return j;
-  }
-  return null;
-}
-
 /** Premier instant ≥ t compatible avec l'écart minimal et le plafond du compte. */
 export function earliestSlot(times: number[], t: number, gapMs: number, cap: number | null): number {
   let at = t;
@@ -110,6 +101,8 @@ export function buildPlan(clipIds: string[], accounts: PlanAccount[], opts: Plan
 /** Contrôle un planning (éventuellement retouché à la main). Liste vide = planning valide. */
 export function checkPlan(rows: PlanRow[], accounts: PlanAccount[], opts: { gapMin: number; now: number }): PlanIssue[] {
   const issues: PlanIssue[] = [];
+  // Règle : chaque problème signalé désigne une ligne du planning (ou le planning entier),
+  // jamais un conflit entre publications déjà programmées auparavant.
   if (rows.length === 0) issues.push({ row: null, message: "Le planning est vide." });
   const byId = new Map(accounts.map((a) => [a.id, a]));
   const seenClip = new Map<string, number>();
@@ -135,15 +128,23 @@ export function checkPlan(rows: PlanRow[], accounts: PlanAccount[], opts: { gapM
     for (let k = 1; k < all.length; k++) {
       const x = all[k - 1]!;
       const y = all[k]!;
-      if (y.at - x.at < gapMs) {
+      // Deux publications déjà programmées entre elles ne concernent pas ce planning.
+      if (y.at - x.at < gapMs && (x.i >= 0 || y.i >= 0)) {
         const row = y.i >= 0 ? y.i : x.i;
         issues.push({ row, message: `Moins de ${formatGap(opts.gapMin)} après une autre publication sur ce compte.` });
       }
     }
-    const j = capViolation(all.map((x) => x.at), a.dailyCap);
-    if (j !== null) {
-      const row = all.slice(j, j + (a.dailyCap ?? 0) + 1).reverse().find((x) => x.i >= 0)?.i ?? null;
-      issues.push({ row, message: `Plus de ${a.dailyCap} publications en 24 h sur ce compte (son plafond).` });
+    // Plafond : seules comptent les fenêtres de 24 h qui contiennent au moins une ligne du planning.
+    const cap = a.dailyCap;
+    if (cap) {
+      for (let j = 0; j + cap < all.length; j++) {
+        const window = all.slice(j, j + cap + 1);
+        if (window[cap]!.at - window[0]!.at >= DAY_MS) continue;
+        const row = [...window].reverse().find((x) => x.i >= 0)?.i;
+        if (row === undefined) continue;
+        issues.push({ row, message: `Plus de ${cap} publications en 24 h sur ce compte (son plafond).` });
+        break;
+      }
     }
   }
   return issues;

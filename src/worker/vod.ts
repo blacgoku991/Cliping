@@ -124,7 +124,9 @@ export async function importVod(recordingId: string): Promise<void> {
     const vod = path.join(dir, file);
     await setProgress(0.55);
 
-    if (short) {
+    // Durée inconnue d'avance (lien direct vers un fichier) : on la lit sur le fichier téléchargé.
+    const isShort = short || (!info.duration && isShortVideo((await probe(vod).catch(() => null))?.duration, options));
+    if (isShort) {
       await importAsClip(recording.id, recording.userId, recording.streamerId, vod, settings);
       return;
     }

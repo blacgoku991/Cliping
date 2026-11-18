@@ -92,8 +92,8 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-        <Card>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
+        <Card className="min-w-0">
           <CardHeader
             title={`Clips approuvés (${clipSel.size}/${clips.length})`}
             hint="Du meilleur score au moins bon : les premiers partent en premier."
@@ -121,7 +121,7 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
           </ul>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader title={`Comptes (${accSel.size}/${accounts.length})`} hint="Chaque clip ira sur un seul de ces comptes." />
           <ul className="divide-y divide-line">
             {accounts.map((a) => (
@@ -140,9 +140,9 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
               </li>
             ))}
           </ul>
-          <div className="grid gap-3 border-t border-line p-5 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <Field label="Début">
-              <Input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} aria-label="Première publication" />
+          <div className="grid grid-cols-2 gap-3 border-t border-line p-5">
+            <Field label="Première publication" className="col-span-2">
+              <Input type="datetime-local" className="min-w-0" value={start} onChange={(e) => setStart(e.target.value)} aria-label="Première publication" />
             </Field>
             <Field label="Écart (heures)" hint="Entre 2 posts d'un compte">
               <Input type="number" min={0} max={72} step={0.5} value={gapHours} onChange={(e) => setGapHours(e.target.value)} />
@@ -168,7 +168,7 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
           {summary.length ? (
             <div className="flex flex-wrap gap-2 border-b border-line px-5 py-3">
               {summary.map((s) => (
-                <Badge key={s.a.id} tone="violet">
+                <Badge key={s.a.id} tone="violet" className="max-w-full whitespace-normal">
                   <SocialIcon platform={s.a.platform} className="size-3" /> {s.a.displayName} · {s.count}
                   {s.first !== undefined && s.last !== undefined && s.count > 1 ? ` · ${label(s.first)} → ${label(s.last)}` : ""}
                 </Badge>

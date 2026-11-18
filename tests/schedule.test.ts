@@ -61,4 +61,10 @@ describe("planification en lot", () => {
     expect(text).toMatch(/^6:Cette date est déjà passée/m);
     expect(text).toMatch(/^7:Compte inconnu/m);
   });
+
+  it("ignore les conflits entre publications déjà programmées (seules les lignes du planning comptent)", () => {
+    const acc: PlanAccount[] = [{ id: "a", dailyCap: 1, existing: [T0, T0 + H] }];
+    expect(checkPlan([{ clipId: "x", accountId: "a", at: T0 + 3 * DAY_MS }], acc, { gapMin: 180, now: T0 })).toEqual([]);
+    expect(checkPlan([{ clipId: "x", accountId: "a", at: T0 + 2 * H }], acc, { gapMin: 30, now: T0 }).map((i) => i.row)).toEqual([0]);
+  });
 });
