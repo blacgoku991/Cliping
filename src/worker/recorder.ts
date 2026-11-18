@@ -374,6 +374,14 @@ export class LiveRecorder {
     if (this.timer) clearInterval(this.timer);
     this.chat?.stop();
     await removeDir(this.dir);
+    // Arrêt demandé (place cédée à une autre chaîne, chaîne mise en pause…) avant d'avoir reçu la moindre image :
+    // ce n'est pas un échec, et un enregistrement vide n'a rien à faire dans l'historique.
+    if (this.timeline === 0 && this.stopping) {
+      await db.recording.delete({ where: { id: this.target.recordingId } }).catch(() => {});
+      log(this.tag(), `arrêté avant le début de la capture (${this.stopReason || "arrêt demandé"})`);
+      this.onEnd?.(this);
+      return;
+    }
     const failed = this.timeline === 0;
     const error = failed ? (this.slErrors.slice(-3).join(" · ") || "Aucune donnée reçue du flux").slice(0, 1000) : null;
     await db.recording
