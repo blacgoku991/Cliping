@@ -82,16 +82,19 @@ export function mergeHashtags(...lists: string[][]): string[] {
 /** Titre neutre quand l'IA n'est pas configurée : on décrit sans rien inventer. */
 export function fallbackMetadata(ctx: MetadataContext, seed: string): ClipMetadata {
   const game = shortGameName(ctx.game);
-  const variants = game
-    ? [`${ctx.streamer} sur ${game} 🔥`, `Le moment de ${ctx.streamer} sur ${game} 😱`, `${ctx.streamer} en live sur ${game} 👀`]
-    : [`${ctx.streamer} en live 🔥`, `Le moment de ${ctx.streamer} 😱`, `${ctx.streamer} en direct 👀`];
+  const who = ctx.streamer.trim();
+  let variants: string[];
+  if (who && game) variants = [`${who} sur ${game} 🔥`, `Le moment de ${who} sur ${game} 😱`, `${who} en live sur ${game} 👀`];
+  else if (who) variants = [`${who} en live 🔥`, `Le moment de ${who} 😱`, `${who} en direct 👀`];
+  else if (game) variants = [`Moment fort sur ${game} 🔥`, `Ça part en vrille sur ${game} 😱`, `${game} : le moment à voir 👀`];
+  else variants = ["Le moment à ne pas rater 🔥", "Moment fort du live 😱", "Extrait du live 👀"];
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return {
     title: variants[h % variants.length]!,
-    hook: game ? `${ctx.streamer} sur ${game}` : ctx.streamer,
-    description: game ? `Extrait du live de ${ctx.streamer} sur ${game}.` : `Extrait du live de ${ctx.streamer}.`,
-    hashtags: mergeHashtags(ctx.defaultHashtags, [ctx.streamer, game]),
+    hook: who && game ? `${who} sur ${game}` : who || game,
+    description: `Extrait du live${who ? ` de ${who}` : ""}${game ? ` sur ${game}` : ""}.`,
+    hashtags: mergeHashtags(ctx.defaultHashtags, [who, game]),
     viralScore: null,
     reason: "",
   };
@@ -112,7 +115,7 @@ export async function generateMetadata(ctx: MetadataContext): Promise<ClipMetada
 
   const user = [
     `Langue de rédaction : ${ctx.language}`,
-    `Streamer : ${ctx.streamer} (${ctx.platform})`,
+    `Streamer : ${ctx.streamer ? `${ctx.streamer} (${ctx.platform})` : "inconnu"}`,
     `Jeu / catégorie : ${ctx.game || "inconnu"}`,
     `Titre du live : ${ctx.streamTitle || "inconnu"}`,
     `Durée de l'extrait : ${Math.round(ctx.durationSec)} s`,

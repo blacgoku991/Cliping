@@ -53,7 +53,7 @@ export async function processClip(clipId: string): Promise<void> {
     if (!clip.title) {
       const signals = (clip.signals ?? {}) as { audio?: number; chat?: number | null; scene?: number | null; detector?: number };
       const ctx: MetadataContext = {
-        streamer: clip.streamer?.displayName ?? clip.recording?.author ?? "Streamer",
+        streamer: clip.streamer?.displayName ?? clip.recording?.author ?? "",
         platform: clip.streamer?.platform ?? "OTHER",
         game: clip.recording?.category ?? clip.streamer?.liveCategory ?? null,
         streamTitle: clip.recording?.title ?? null,

@@ -7,14 +7,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "worker": "tsx src/worker/index.ts",
-    "worker:dev": "tsx watch src/worker/index.ts",
+    "worker": "tsx --env-file-if-exists=.env src/worker/index.ts",
+    "worker:dev": "tsx watch --env-file-if-exists=.env src/worker/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:dev": "prisma migrate dev",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "demo:seed": "tsx --env-file-if-exists=.env tests/e2e/seed.ts"
   },
   "engines": {
     "node": ">=20.9.0"

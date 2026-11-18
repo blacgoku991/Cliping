@@ -1,0 +1,74 @@
+# Lancement complet :  docker compose up -d --build
+# Avec HTTPS automatique (nom de domaine requis, voir README) :  docker compose --profile https up -d --build
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://cliping:${POSTGRES_PASSWORD:-cliping}@db:5432/cliping
+  DATA_DIR: /data
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cliping
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cliping}
+      POSTGRES_DB: cliping
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cliping -d cliping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Applique les migrations de base de données puis s'arrête.
+  migrate:
+    build: { context: ., target: worker }
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+    environment: *app-env
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  web:
+    build: { context: ., target: web }
+    restart: unless-stopped
+    env_file: .env
+    environment: *app-env
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - clipdata:/data
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    build: { context: ., target: worker }
+    restart: unless-stopped
+    env_file: .env
+    environment: *app-env
+    volumes:
+      - clipdata:/data
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    # Laisse le temps de finir les clips en cours avant l'arrêt.
+    stop_grace_period: 2m
+
+  # Optionnel : HTTPS automatique (Let's Encrypt). Indispensable pour connecter TikTok/YouTube hors localhost.
+  caddy:
+    profiles: ["https"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${DOMAIN:-localhost} --to web:3000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddydata:/data
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  clipdata:
+  caddydata:

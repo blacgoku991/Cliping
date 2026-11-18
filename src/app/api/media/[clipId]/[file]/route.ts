@@ -1,6 +1,5 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { Readable } from "node:stream";
 import { db } from "@/lib/db";
 import { getUser } from "@/lib/session";
 import { clipFile, type ClipFileKind } from "@/lib/storage";
@@ -10,6 +9,57 @@ const FILES: Record<string, { kind: ClipFileKind; type: string }> = {
   "source.mp4": { kind: "source", type: "video/mp4" },
   "thumb.jpg": { kind: "thumb", type: "image/jpeg" },
 };
+
+/**
+ * Lit un fichier sous forme de flux web. Écrit à la main plutôt qu'avec Readable.toWeb() :
+ * un lecteur vidéo interrompt sans cesse ses requêtes (avance rapide, changement de page), et il faut
+ * alors arrêter proprement la lecture du fichier au lieu de pousser des données dans un flux déjà fermé.
+ */
+function fileStream(path: string, range?: { start: number; end: number }): ReadableStream<Uint8Array> {
+  const source = createReadStream(path, range);
+  let closed = false;
+  const finish = () => {
+    closed = true;
+    source.destroy();
+  };
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      source.on("data", (chunk) => {
+        if (closed) return;
+        try {
+          controller.enqueue(chunk as Uint8Array);
+          if ((controller.desiredSize ?? 0) <= 0) source.pause();
+        } catch {
+          finish();
+        }
+      });
+      source.on("end", () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* le client est déjà parti */
+        }
+      });
+      source.on("error", (err) => {
+        if (closed) return;
+        finish();
+        try {
+          controller.error(err);
+        } catch {
+          /* le client est déjà parti */
+        }
+      });
+    },
+    pull() {
+      if (!closed) source.resume();
+    },
+    cancel() {
+      finish();
+    },
+  });
+}
 
 /** Sert les fichiers d'un clip à son propriétaire, avec prise en charge de Range (lecture/avance rapide). */
 export async function GET(req: Request, ctx: { params: Promise<{ clipId: string; file: string }> }): Promise<Response> {
@@ -51,8 +101,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ clipId: string;
     }
     headers.set("Content-Range", `bytes ${start}-${end}/${size}`);
     headers.set("Content-Length", String(end - start + 1));
-    return new Response(Readable.toWeb(createReadStream(path, { start, end })) as ReadableStream, { status: 206, headers });
+    return new Response(fileStream(path, { start, end }), { status: 206, headers });
   }
   headers.set("Content-Length", String(size));
-  return new Response(Readable.toWeb(createReadStream(path)) as ReadableStream, { status: 200, headers });
+  return new Response(fileStream(path), { status: 200, headers });
 }

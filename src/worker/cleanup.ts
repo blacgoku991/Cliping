@@ -35,8 +35,12 @@ export async function cleanup(): Promise<void> {
     }
   }
 
+  // On liste les dossiers AVANT d'interroger la base : un clip ou un enregistrement créé entre-temps
+  // n'est pas dans la liste, donc ne risque pas d'être pris pour un orphelin.
+  const clipDirs = await readdir(path.join(env.dataDir, "clips")).catch(() => [] as string[]);
+  const recordingDirs = await readdir(path.join(env.dataDir, "recordings")).catch(() => [] as string[]);
   const known = new Set((await db.clip.findMany({ select: { id: true } })).map((c) => c.id));
-  for (const name of await readdir(path.join(env.dataDir, "clips")).catch(() => [] as string[])) {
+  for (const name of clipDirs) {
     if (!known.has(name)) {
       await removeDir(path.join(env.dataDir, "clips", name));
       removed++;
@@ -46,7 +50,7 @@ export async function cleanup(): Promise<void> {
   const busy = new Set(
     (await db.recording.findMany({ where: { status: { in: ["PENDING", "PROCESSING", "RECORDING"] } }, select: { id: true } })).map((r) => r.id),
   );
-  for (const name of await readdir(path.join(env.dataDir, "recordings")).catch(() => [] as string[])) {
+  for (const name of recordingDirs) {
     if (!busy.has(name)) await removeDir(path.join(env.dataDir, "recordings", name));
   }
 

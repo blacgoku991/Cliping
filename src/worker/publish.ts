@@ -25,8 +25,12 @@ async function applyResult(publicationId: string, accountId: string, result: Pub
 }
 
 /** Les erreurs où réessayer ne changera rien deviennent définitives pour la file de tâches. */
-function classify(err: unknown): unknown {
+function classify(err: unknown, label: string): unknown {
   if (err instanceof ReauthRequiredError || err instanceof PlatformRejectedError) return new PermanentError(err.message);
+  // Erreurs réseau de fetch (« fetch failed », délai dépassé) : message compréhensible, et on réessaiera.
+  if (err instanceof TypeError || (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError"))) {
+    return new Error(`Connexion à ${label} impossible (problème réseau ou délai dépassé).`);
+  }
   return err;
 }
 
@@ -59,7 +63,7 @@ export async function publish(publicationId: string): Promise<void> {
     await applyResult(publicationId, pub.accountId, result);
     log("publish", `${adapter.label} · ${pub.account.displayName} : ${result.status === "PUBLISHED" ? "publié" : "en traitement"} ${result.url ?? ""}`);
   } catch (err) {
-    throw classify(err);
+    throw classify(err, adapter.label);
   }
 }
 
@@ -75,7 +79,7 @@ export async function checkPublication(publicationId: string): Promise<void> {
     if (result.status === "PROCESSING") throw new Error("La plateforme traite encore la vidéo");
     await applyResult(publicationId, pub.accountId, result);
   } catch (err) {
-    throw classify(err);
+    throw classify(err, adapter.label);
   }
 }
 

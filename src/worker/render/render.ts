@@ -91,10 +91,11 @@ export function buildFilterGraph(input: RenderInput): string {
     );
   }
 
+  // setsar=1 : pixels carrés garantis, sinon certains lecteurs affichent 1080×1921.
   if (input.assFile) {
-    parts.push(`[base]ass=filename=${escFilterArg(input.assFile)}:fontsdir=${escFilterArg(FONTS_DIR)}[v]`);
+    parts.push(`[base]setsar=1,ass=filename=${escFilterArg(input.assFile)}:fontsdir=${escFilterArg(FONTS_DIR)}[v]`);
   } else {
-    parts.push(`[base]null[v]`);
+    parts.push(`[base]setsar=1[v]`);
   }
   return parts.join(";");
 }
