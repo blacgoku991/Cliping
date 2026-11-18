@@ -79,13 +79,13 @@ export function CompilationEditor({ id, moments, values, busy }: { id: string; m
                 setDragOver(null);
               }}
               className={cx(
-                "flex items-center gap-2 rounded-xl border bg-bg p-2 transition sm:gap-3",
+                "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded-xl border bg-bg p-2 transition sm:flex sm:gap-3",
                 dragOver === i && dragFrom !== null && dragFrom !== i ? "border-brand" : "border-line",
                 dragFrom === i && "opacity-50",
               )}
             >
               <GripVertical className="hidden size-4 shrink-0 cursor-grab text-faint sm:block" aria-hidden />
-              <span className="grid h-9 w-11 shrink-0 place-items-center rounded-lg brand-gradient font-display text-lg text-white tabular-nums">
+              <span className="row-span-2 grid h-9 w-11 shrink-0 place-items-center rounded-lg brand-gradient font-display text-lg text-white tabular-nums">
                 #{momentNumber(i, items.length, countdown)}
               </span>
               <div className="hidden aspect-video w-20 shrink-0 overflow-hidden rounded-md bg-surface-2 sm:block">
@@ -96,20 +96,21 @@ export function CompilationEditor({ id, moments, values, busy }: { id: string; m
                   <Clapperboard className="m-auto mt-3 size-4 text-faint" aria-hidden />
                 )}
               </div>
-              <div className="min-w-0 flex-1">
+              {/* Sur mobile, le titre prend toute la largeur et les flèches passent à côté des infos du moment. */}
+              <div className="contents sm:block sm:min-w-0 sm:flex-1">
                 <input
                   value={m.label}
                   onChange={(e) => setItems((prev) => prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
                   placeholder={m.title || "Titre du moment"}
                   maxLength={80}
                   aria-label={`Titre du moment ${i + 1}`}
-                  className="h-9 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-ink hover:border-line focus:border-brand focus:outline-none"
+                  className="col-span-2 h-9 w-full min-w-0 rounded-lg border border-transparent bg-transparent px-2 text-sm font-medium text-ink hover:border-line focus:border-brand focus:outline-none"
                 />
                 <p className="truncate px-2 text-xs text-muted">
                   {m.streamer || "Import"} · {sec(m.duration)} · 🔥 {m.score}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center">
+              <div className="flex shrink-0 items-center justify-end">
                 <button type="button" onClick={() => move(i, i - 1)} disabled={i === 0} aria-label={`Monter le moment ${i + 1}`} className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-30">
                   <ArrowUp className="size-4" />
                 </button>

@@ -78,18 +78,25 @@ export async function proposalsFor(userId: string): Promise<Proposal[]> {
         clips: { where: ELIGIBLE, select: { id: true, score: true, hasFinal: true }, orderBy: { score: "desc" } },
       },
     }),
-    db.compilation.findMany({ where: { userId, createdAt: { gte: since14 } }, select: { origin: true } }),
+    db.compilation.findMany({ where: { userId, createdAt: { gte: since14 } }, select: { origin: true, createdAt: true } }),
     db.clip.findMany({
       where: { userId, ...ELIGIBLE, createdAt: { gte: new Date(Date.now() - 7 * 86_400_000) } },
       select: { id: true, score: true, streamerId: true, createdAt: true, hasFinal: true, streamer: { select: { displayName: true } } },
       orderBy: { score: "desc" },
     }),
   ]);
+  // Déjà compilé : un live une fois pour toutes ; un streamer au plus une fois par semaine ; les 24 h une fois par jour.
+  const window: Record<string, number> = { recording: 14 * 86_400_000, streamer: 7 * 86_400_000, day: 86_400_000 };
   const used = new Set(
-    done.map((c) => {
-      const o = (c.origin ?? {}) as { kind?: string; id?: string };
-      return `${o.kind}:${o.id ?? ""}`;
-    }),
+    done
+      .filter((c) => {
+        const kind = ((c.origin ?? {}) as { kind?: string }).kind ?? "";
+        return Date.now() - c.createdAt.getTime() < (window[kind] ?? 0);
+      })
+      .map((c) => {
+        const o = (c.origin ?? {}) as { kind?: string; id?: string };
+        return `${o.kind}:${o.id ?? ""}`;
+      }),
   );
   const thumbsOf = (clips: Array<{ id: string; hasFinal: boolean }>) => clips.filter((c) => c.hasFinal).slice(0, 3).map((c) => c.id);
   const out: Proposal[] = [];
@@ -114,7 +121,7 @@ export async function proposalsFor(userId: string): Promise<Proposal[]> {
     byStreamer.set(c.streamerId, [...(byStreamer.get(c.streamerId) ?? []), c]);
   }
   for (const [sid, clips] of byStreamer) {
-    if (clips.length < 5) continue;
+    if (clips.length < 5 || used.has(`streamer:${sid}`)) continue;
     out.push({
       kind: "streamer",
       id: sid,
@@ -127,7 +134,7 @@ export async function proposalsFor(userId: string): Promise<Proposal[]> {
   }
 
   const day = recentClips.filter((c) => c.createdAt.getTime() > Date.now() - 86_400_000);
-  if (day.length >= 5) {
+  if (day.length >= 5 && !used.has("day:")) {
     out.push({
       kind: "day",
       id: "",

@@ -24,6 +24,8 @@ export async function cleanup(): Promise<void> {
         createdAt: { lt: new Date(Date.now() - days * 86_400_000) },
         status: { in: ["READY", "REJECTED", "FAILED"] },
         publications: { none: {} },
+        // Un clip retenu dans une compilation garde sa source : elle sert à remonter la vidéo.
+        compilationItems: { none: {} },
       },
       select: { id: true },
       take: 500,

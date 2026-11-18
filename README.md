@@ -116,6 +116,18 @@ Ce qui fait qu'un clip est regardé jusqu'au bout, ce sont les deux premières s
 - **Barre de progression** fine en haut de l'image, et **carton de fin** optionnel (appel à s'abonner + crédit du streamer, désactivé par défaut : il casse la boucle de relecture).
 - **Trois accroches et trois titres** proposés par l'IA (ou des variantes neutres sans IA), à choisir d'un clic dans l'éditeur.
 
+## Compilations « best-of » pour YouTube
+
+En plus des clips verticaux, Cliping assemble des **compilations horizontales 1920×1080** pour YouTube classique (« Les 10 meilleurs moments de X sur GTA 6 »), à partir des clips existants (leur source 16:9 est conservée).
+
+- **Faire le best-of** (page Compilations, ou sur un import terminé dans Streamers) : un live terminé avec au moins 3 clips, un streamer avec au moins 5 clips sur la semaine, ou les dernières 24 h. Les 10 meilleurs moments sont choisis (deux clips du même instant ne comptent qu'une fois), rangés en compte à rebours (le meilleur à la fin), et le montage part tout de suite. **Composer à la main** permet de cocher ses clips.
+- **Éditeur** : ordre des moments par glisser-déposer ou flèches, titre de chaque moment (affiché à l'écran et repris en chapitre), ajout ou retrait de moments, titre, description, mots-clés et texte de la miniature. La vidéo est signalée « à remonter » dès qu'un changement la rend obsolète, et ne peut pas être publiée dans cet état.
+- **Montage** : ouverture de 3,5 s sur le pic du meilleur moment avec le titre de la vidéo, puis éclair blanc ; à chaque moment, un repère « #N + titre » en bas à gauche pendant 4,5 s ; crédit du streamer en haut à droite ; sous-titres sur une ligne en bas (mots forts en couleur) ; bref fondu au noir entre deux moments ; son ramené à -14 LUFS **moment par moment** (niveau homogène même si les sources sont très différentes) ; carton de fin de 4 s qui remercie les streamers. Une source verticale (clip importé) est posée sur un fond flouté.
+- **Chapitres** : calculés au montage selon les règles de YouTube (premier à 00:00, au moins 3, 10 s minimum chacun ; un moment trop court est rattaché au précédent ; moins de 3 → pas de chapitres) et ajoutés à la description, avec les liens vers les chaînes des streamers et 3 hashtags.
+- **Titre, description, miniature** : proposés par l'IA quand `ANTHROPIC_API_KEY` est renseignée (titre pensé pour la recherche, sans promesse que la vidéo ne tient pas), sinon par des valeurs neutres. Miniature 1280×720 : image du moment le plus fort, contrastée, texte court en gros et cadre « TOP N ».
+- **Publication** : sur une chaîne YouTube connectée, en vidéo classique (pas un Short), maintenant ou programmée, avec la miniature personnalisée. YouTube n'accepte les miniatures personnalisées que des chaînes vérifiées (youtube.com/verify) : sinon la vidéo part quand même et la publication l'indique. Une compilation compte dans le plafond de publications sur 24 h du compte.
+- **Durée de montage** : 74 s pour 10 moments (vidéo de 3 min 12) sur 4 cœurs, environ 90 s avec la préparation du titre et de la miniature.
+
 Sur Kick, YouTube et TikTok, le chat n'est pas lu : la détection repose sur le son et l'image, et sera donc un peu moins fine que sur Twitch. (Kick ne propose officiellement la lecture du chat que par webhooks vers une adresse publique ; le websocket utilisé par son site n'est pas documenté et peut changer sans prévenir, il n'a donc pas été retenu.)
 
 ## Ce qui a été vérifié, et ce qui ne l'a pas été
@@ -123,12 +135,13 @@ Sur Kick, YouTube et TikTok, le chat n'est pas lu : la détection repose sur le 
 Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e2e/`) :
 
 - détection du live, enregistrement, analyse, détection des moments, découpe exacte à l'image près, montage 1080×1920 avec sous-titres, nettoyage du disque, arrêt propre ;
-- import de replay, retouche et remontage d'un clip depuis l'interface, lecture vidéo, pages sur ordinateur et mobile.
+- import de replay, retouche et remontage d'un clip depuis l'interface, lecture vidéo, pages sur ordinateur et mobile ;
+- compilations : montage de 10 moments, durée exacte, chapitres calés sur le début de chaque moment et sous-titres synchronisés (vérifiés image par image sur le chrono incrusté du flux de test, `tests/e2e/seed-moments.ts`), niveau sonore homogène (sources de -41 à -21 LUFS → -14 ±0,2 LUFS).
 
 **Non vérifié en conditions réelles**, faute d'accès depuis l'environnement de développement :
 
 - la capture de vrais lives Twitch, Kick et YouTube (elle repose sur `streamlink`, l'outil de référence, mais n'a pas pu être essayée ici) ;
-- les envois vers YouTube et TikTok : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
+- les envois vers YouTube et TikTok (compilations et miniatures comprises) : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
 - l'appel à Claude et à l'API de transcription ;
 - la capture de TikTok Live (plugin `tiktok` de streamlink 8.6, fragile car TikTok change souvent son site) et le téléchargement de vrais clips Twitch/Kick/TikTok/Shorts par yt-dlp (extracteurs présents dans la version installée, mais sites injoignables ici). L'import d'un clip court a été vérifié de bout en bout avec des fichiers servis localement ;
 - l'annuaire des lives Twitch (API Helix, jeton d'application) et Kick (API publique `api.kick.com/public/v1`) : écrits d'après leur documentation, testés uniquement contre un faux annuaire. Pour Kick, les noms exacts des paramètres de `/livestreams` (`category_id`, `language`, `sort`) n'ont pu être confirmés que par des bibliothèques tierces ;
@@ -193,6 +206,7 @@ src/worker/                 le bot
   pipeline/clip.ts            transcription → titre → montage
   render/                     sous-titres ASS et montage ffmpeg
   vod.ts, publish.ts          import de replays, publication
+  compilation.ts              compilations horizontales (montage : render/compilation.ts ; logique pure : src/lib/compilation.ts)
 tests/                      tests unitaires + banc d'essai de bout en bout
 ```
 

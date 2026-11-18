@@ -146,8 +146,9 @@ export default async function CompilationPage({ params }: { params: Promise<{ id
             <CardHeader title="Moments et habillage" hint="Tout ce que tu changes ici est pris en compte au prochain montage." />
             <div className="p-4 sm:p-5">
               <CompilationEditor
-                // Remonté seulement quand le contenu enregistré change (pas à chaque rafraîchissement de l'avancement).
-                key={`${signature}|${comp.description}|${comp.thumbText}|${comp.tags.join(",")}`}
+                // Remonté seulement quand le contenu change hors de l'éditeur (titre proposé par l'IA, fin de montage,
+                // moments ajoutés) ; pas après un simple enregistrement, pour garder le message de confirmation.
+                key={`${comp.metaPending}|${montage.signature ?? ""}|${[...inComp].sort().join(",")}`}
                 id={id}
                 busy={rendering}
                 moments={comp.items.map((i) => ({

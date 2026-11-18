@@ -59,11 +59,11 @@ export function ClipPicker({
           <button type="button" onClick={() => setPicked([])} className="h-10 rounded-xl px-3 text-sm font-medium text-muted hover:bg-surface-2 hover:text-ink">Tout décocher</button>
         ) : null}
       </div>
-      <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map((c) => {
           const on = picked.includes(c.id);
           return (
-            <li key={c.id}>
+            <li key={c.id} className="min-w-0">
               <button
                 type="button"
                 onClick={() => toggle(c.id)}
@@ -91,15 +91,16 @@ export function ClipPicker({
           );
         })}
       </ul>
-      <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface/95 p-3 backdrop-blur">
+      {/* Au-dessus de la barre de navigation du bas sur mobile */}
+      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface/95 p-3 backdrop-blur sm:gap-3 lg:bottom-3">
         <span className="text-sm text-muted">{picked.length} sélectionné{picked.length > 1 ? "s" : ""}{min > 1 && picked.length < min ? ` · au moins ${min}` : ""}</span>
         {withOrder ? (
-          <Select name="order" defaultValue="countdown" aria-label="Ordre" className="w-auto">
-            <option value="countdown">Compte à rebours (le meilleur à la fin)</option>
-            <option value="chrono">Ordre chronologique</option>
+          <Select name="order" defaultValue="countdown" aria-label="Ordre des moments" className="w-auto min-w-0 max-w-full">
+            <option value="countdown">Le meilleur à la fin</option>
+            <option value="chrono">Ordre du live</option>
           </Select>
         ) : null}
-        <SubmitButton variant="primary" className="ml-auto" disabled={picked.length < min} pendingLabel="Création…">{submitLabel}</SubmitButton>
+        <SubmitButton variant="primary" className="w-full sm:ml-auto sm:w-auto" disabled={picked.length < min} pendingLabel="Création…">{submitLabel}</SubmitButton>
       </div>
     </ActionForm>
   );
