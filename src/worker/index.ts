@@ -10,6 +10,7 @@ import { Monitor, resetStaleState } from "./monitor";
 import { processClip, renderClip } from "./pipeline/clip";
 import { log, run } from "./proc";
 import { checkPublication, markPublicationError, publish } from "./publish";
+import { collectStats, statsLoop } from "./stats";
 import { transcriptionEnabled } from "./transcribe";
 import { importVod, markVodFailed } from "./vod";
 
@@ -27,6 +28,7 @@ const handlers: Handlers = {
   publish: (p) => publish(p.publicationId),
   "publish.check": (p) => checkPublication(p.publicationId),
   cleanup: () => cleanup(),
+  "stats.collect": () => collectStats(),
 };
 
 async function onFailure(job: Job, error: unknown, willRetry: boolean): Promise<void> {
@@ -51,7 +53,7 @@ async function runJob(job: Job): Promise<void> {
     await handler(job.payload);
     await completeJob(job.id);
     // publish.check « échoue » exprès tant que la plateforme traite la vidéo : pas la peine de l'afficher.
-    if (job.type !== "publish.check") log("job", `${job.type} terminé en ${((Date.now() - started) / 1000).toFixed(1)} s`);
+    if (job.type !== "publish.check" && job.type !== "stats.collect") log("job", `${job.type} terminé en ${((Date.now() - started) / 1000).toFixed(1)} s`);
   } catch (err) {
     const willRetry = await failJob(job, err);
     await onFailure(job, err, willRetry).catch(() => {});
@@ -164,7 +166,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => stop("SIGTERM"));
   process.on("SIGINT", () => stop("SIGINT"));
 
-  await Promise.all([jobLoop(), monitorLoop(), heartbeatLoop()]);
+  await Promise.all([jobLoop(), monitorLoop(), heartbeatLoop(), statsLoop(() => shuttingDown)]);
 }
 
 main().catch((err) => {
