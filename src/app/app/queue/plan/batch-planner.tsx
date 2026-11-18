@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CalendarClock, Shuffle, X } from "lucide-react";
 import { scheduleBatch } from "@/app/actions/clips";
 import { ActionForm, SubmitButton } from "@/components/action-form";
@@ -69,6 +69,17 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
     setRows(buildPlan(order, chosen, { start: Math.max(startMs, t), gapMin, staggerMin: Math.max(0, Number(stagger) || 0) }));
   };
 
+  // Geste en un clic : à l'ouverture, tout est coché et l'aperçu est déjà calculé avec des réglages
+  // par défaut raisonnables (départ dans ~15 min, 3 h entre deux posts d'un compte, 20 min entre comptes).
+  // Il ne reste qu'à vérifier et cliquer « Programmer ». (Calcul côté navigateur : l'heure locale y est connue.)
+  const autoComputed = useRef(false);
+  useEffect(() => {
+    if (autoComputed.current) return;
+    autoComputed.current = true;
+    compute();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const issues = useMemo(() => (rows ? checkPlan(rows, accounts, { gapMin, now }) : []), [rows, accounts, gapMin, now]);
   const rowIssues = useMemo(() => {
     const m = new Map<number, string[]>();
@@ -92,6 +103,74 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
 
   return (
     <div className="space-y-5">
+      {rows ? (
+        <Card>
+          <CardHeader
+            title={<span className="flex items-center gap-2"><CalendarClock className="size-4" /> Aperçu du planning · {rows.length} publication{rows.length > 1 ? "s" : ""}</span>}
+            hint={`Un clip = un compte. Au moins ${formatGap(gapMin)} entre deux posts d'un même compte. Change le compte ou l'heure d'une ligne si besoin.`}
+          />
+          <ActionForm action={scheduleBatch} className="space-y-3 border-b border-line p-5" messageClassName="">
+            <input type="hidden" name="plan" value={JSON.stringify(rows)} />
+            <input type="hidden" name="gapMin" value={gapMin} />
+            {general.map((g) => <p key={g.message} className="text-sm text-bad">{g.message}</p>)}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs leading-relaxed text-faint">
+                Les heures sont celles de ton appareil. Chaque compte reçoit sa visibilité par défaut ; tu peux annuler une publication programmée depuis « Publications ».
+              </p>
+              <SubmitButton variant="primary" disabled={issues.length > 0 || rows.length === 0} pendingLabel="Programmation…">
+                Programmer {rows.length} publication{rows.length > 1 ? "s" : ""}
+              </SubmitButton>
+            </div>
+          </ActionForm>
+          {summary.length ? (
+            <div className="flex flex-wrap gap-2 border-b border-line px-5 py-3">
+              {summary.map((s) => (
+                <span key={s.a.id} className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-violet/30 bg-violet/12 px-2.5 py-0.5 text-xs font-medium text-violet">
+                  <SocialIcon platform={s.a.platform} className="size-3" /> {s.a.displayName} · {s.count}
+                  {s.first !== undefined && s.last !== undefined && s.count > 1 ? ` · ${label(s.first)} → ${label(s.last)}` : ""}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <ol className="divide-y divide-line">
+            {rows.map((r, i) => {
+              const c = clipById.get(r.clipId);
+              const problems = rowIssues.get(i);
+              return (
+                <li key={r.clipId} className={cx("grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5 md:grid-cols-[auto_minmax(0,1fr)_220px_200px_auto]", problems && "bg-bad/5")}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={c?.thumb} alt="" className="aspect-[9/16] w-8 rounded-md bg-surface-2 object-cover" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{c?.title ?? r.clipId}</p>
+                    {problems ? (
+                      <p className="flex items-start gap-1 text-xs text-bad"><AlertTriangle className="mt-0.5 size-3 shrink-0" /> {problems.join(" ")}</p>
+                    ) : (
+                      <p className="truncate text-xs text-faint">{label(r.at)}</p>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => remove(i)} className="rounded-lg p-1.5 text-faint hover:bg-surface-2 hover:text-ink md:order-last" aria-label={`Retirer « ${c?.title} » du planning`} title="Retirer du planning">
+                    <X className="size-4" />
+                  </button>
+                  <Select value={r.accountId} onChange={(e) => update(i, { accountId: e.target.value })} aria-label="Compte" className="col-span-3 md:col-span-1">
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.displayName} ({a.platform === "YOUTUBE" ? "YouTube" : "TikTok"})</option>)}
+                  </Select>
+                  <Input
+                    type="datetime-local"
+                    value={localInputValue(r.at)}
+                    onChange={(e) => {
+                      const t = new Date(e.target.value).getTime();
+                      if (Number.isFinite(t)) update(i, { at: t });
+                    }}
+                    aria-label="Date et heure de publication"
+                    className="col-span-3 md:col-span-1"
+                  />
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
+      ) : null}
+      <h2 className="pt-2 text-sm font-semibold text-muted">Changer la sélection ou les créneaux</h2>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
         <Card className="min-w-0">
           <CardHeader
@@ -158,74 +237,6 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
           </div>
         </Card>
       </div>
-
-      {rows ? (
-        <Card>
-          <CardHeader
-            title={<span className="flex items-center gap-2"><CalendarClock className="size-4" /> Aperçu du planning · {rows.length} publication{rows.length > 1 ? "s" : ""}</span>}
-            hint={`Un clip = un compte. Au moins ${formatGap(gapMin)} entre deux posts d'un même compte. Change le compte ou l'heure d'une ligne si besoin.`}
-          />
-          {summary.length ? (
-            <div className="flex flex-wrap gap-2 border-b border-line px-5 py-3">
-              {summary.map((s) => (
-                <Badge key={s.a.id} tone="violet" className="max-w-full whitespace-normal">
-                  <SocialIcon platform={s.a.platform} className="size-3" /> {s.a.displayName} · {s.count}
-                  {s.first !== undefined && s.last !== undefined && s.count > 1 ? ` · ${label(s.first)} → ${label(s.last)}` : ""}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
-          <ol className="divide-y divide-line">
-            {rows.map((r, i) => {
-              const c = clipById.get(r.clipId);
-              const problems = rowIssues.get(i);
-              return (
-                <li key={r.clipId} className={cx("grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5 md:grid-cols-[auto_minmax(0,1fr)_220px_200px_auto]", problems && "bg-bad/5")}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={c?.thumb} alt="" className="aspect-[9/16] w-8 rounded-md bg-surface-2 object-cover" />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{c?.title ?? r.clipId}</p>
-                    {problems ? (
-                      <p className="flex items-start gap-1 text-xs text-bad"><AlertTriangle className="mt-0.5 size-3 shrink-0" /> {problems.join(" ")}</p>
-                    ) : (
-                      <p className="truncate text-xs text-faint">{label(r.at)}</p>
-                    )}
-                  </div>
-                  <button type="button" onClick={() => remove(i)} className="rounded-lg p-1.5 text-faint hover:bg-surface-2 hover:text-ink md:order-last" aria-label={`Retirer « ${c?.title} » du planning`} title="Retirer du planning">
-                    <X className="size-4" />
-                  </button>
-                  <Select value={r.accountId} onChange={(e) => update(i, { accountId: e.target.value })} aria-label="Compte" className="col-span-3 md:col-span-1">
-                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.displayName} ({a.platform === "YOUTUBE" ? "YouTube" : "TikTok"})</option>)}
-                  </Select>
-                  <Input
-                    type="datetime-local"
-                    value={localInputValue(r.at)}
-                    onChange={(e) => {
-                      const t = new Date(e.target.value).getTime();
-                      if (Number.isFinite(t)) update(i, { at: t });
-                    }}
-                    aria-label="Date et heure de publication"
-                    className="col-span-3 md:col-span-1"
-                  />
-                </li>
-              );
-            })}
-          </ol>
-          <ActionForm action={scheduleBatch} className="space-y-3 border-t border-line p-5" messageClassName="">
-            <input type="hidden" name="plan" value={JSON.stringify(rows)} />
-            <input type="hidden" name="gapMin" value={gapMin} />
-            {general.map((g) => <p key={g.message} className="text-sm text-bad">{g.message}</p>)}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs leading-relaxed text-faint">
-                Les heures sont celles de ton appareil. Chaque compte reçoit sa visibilité par défaut ; tu peux annuler une publication programmée depuis « Publications ».
-              </p>
-              <SubmitButton variant="primary" disabled={issues.length > 0 || rows.length === 0} pendingLabel="Programmation…">
-                Programmer {rows.length} publication{rows.length > 1 ? "s" : ""}
-              </SubmitButton>
-            </div>
-          </ActionForm>
-        </Card>
-      ) : null}
     </div>
   );
 }

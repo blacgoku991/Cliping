@@ -26,7 +26,7 @@ export default async function PlanPage() {
   const header = (
     <PageHeader
       title="Planifier en lot"
-      subtitle="Choisis des clips approuvés et des comptes : chaque clip part sur un seul compte, avec des publications étalées dans le temps. Tu vérifies et retouches le planning avant de valider."
+      subtitle="Tous tes clips approuvés, répartis sur tous tes comptes : chaque clip part sur un seul compte, avec des publications étalées dans le temps. L'aperçu ci-dessous est prêt ; vérifie-le (ou retouche-le) puis clique sur « Programmer »."
       action={<LinkButton href="/app/queue" size="sm"><ArrowLeft className="size-3.5" /> Publications</LinkButton>}
     />
   );
