@@ -12,6 +12,26 @@ Cliping regarde les lives à ta place, repère les meilleurs moments, les monte 
   programmable)                              titre + hashtags proposés par l'IA
 ```
 
+En plus des clips : des compilations « best-of » horizontales pour YouTube classique, un pilote automatique, des notifications sur ton téléphone, le suivi de ce que deviennent tes vidéos, et un guide de conseils.
+
+## Tour de l'app
+
+| Page | À quoi elle sert |
+|---|---|
+| **Accueil** | Où en sont les lives, ce qu'il y a à valider, le planning des publications par compte. Le meilleur clip récent tourne dans un **aperçu téléphone** (interface TikTok, Shorts ou Reels par-dessus, et « zones sûres » pour vérifier que rien n'est masqué). Courbe d'intensité en direct des lives captés. |
+| **Mode validation** | Trier vite : un clip à la fois en plein écran, flèches du clavier ou glissement du pouce pour approuver ou écarter. |
+| **Clips** | Tous les clips, avec aperçu au survol. Sur un clip : retouche (découpe, accroche, style de sous-titres, options de montage), publication, et **kit de publication** (légende par plateforme, commentaire à épingler, réponses types). |
+| **Publications** | Ce qui est programmé, en cours, en ligne ou en échec ; planification en lot. |
+| **Pilote auto** | Approbation et programmation automatiques (désactivées par défaut), notifications, journal. |
+| **Streamers** | Chaînes suivies, lives du moment et suivi automatique, import d'une vidéo. |
+| **Compilations** | Best-of horizontaux pour YouTube classique. |
+| **Comptes** | Connexion des comptes YouTube, TikTok et Instagram, réglages par compte. |
+| **Performances** | Vues, likes et commentaires de tes publications, comparaison des comptes, et « ce qui marche chez toi ». |
+| **Conseils** | Guide en liste de contrôle, fiches par plateforme, générateur de bio, aide aux réponses. |
+| **Réglages** | Détection, montage, sous-titres, durées, conservation. |
+
+L'app est **installable sur l'écran d'accueil** d'un téléphone (sur iPhone : Safari → Partager → Sur l'écran d'accueil) ; c'est nécessaire pour recevoir les notifications sur iPhone.
+
 ## Démarrage rapide (Docker)
 
 Il te faut un serveur Linux avec Docker (un VPS 4 cœurs / 8 Go suffit pour 3 à 5 lives simultanés).
@@ -28,14 +48,14 @@ Le filtre de jeu est pré-rempli sur « Grand Theft Auto VI » (« GTA 6 » et �
 
 Pour tester sans attendre un live, colle le lien d'un replay dans **Streamers → Importer une vidéo**.
 
+Une fois ton compte créé, mets `ALLOW_SIGNUP="false"` dans `.env` puis `docker compose up -d` si tu es le seul utilisateur.
+
 ## D'où viennent les clips
 
 - **Lives suivis** : Twitch, Kick, YouTube et **TikTok Live** (`tiktok.com/@pseudo`). Sur YouTube et TikTok, qui n'affichent pas de catégorie, le filtre de jeu est cherché dans le titre du live.
 - **Import d'une vidéo** (Streamers → Importer une vidéo) : colle le lien d'un **clip Twitch**, d'un **clip Kick**, d'une **vidéo ou d'un Short YouTube**, d'une **vidéo TikTok** (liens courts `vm.tiktok.com` compris), ou d'un replay. Une vidéo de 2 min 30 ou moins (`SHORT_VIDEO_MAX_SEC`) devient directement un clip vertical (une vidéo déjà verticale garde tout l'écran) ; au-delà, le bot y cherche les moments forts comme dans un replay.
 - **« En live maintenant »** (page Streamers) : les plus gros lives d'un jeu (GTA 6 par défaut) dans une langue, avec spectateurs, titre et miniature, et un bouton **Suivre**. Demande des identifiants d'application Twitch (`TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`, gratuits, voir `.env.example`) ; Kick en plus avec `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET`.
 - **Mode automatique** : « suivre automatiquement les N plus gros lives de ce jeu dans cette langue ». Toutes les 2 minutes, le bot ajoute les nouveaux gros lives et retire ceux qui sortent du classement (mis en pause s'ils ont déjà des clips, pour garder le crédit). Il reste dans la limite de `MAX_CONCURRENT_RECORDINGS`, ne touche jamais aux chaînes ajoutées à la main, et leur cède la place : si une chaîne manuelle démarre un live alors que tout est pris, la capture automatique la moins regardée s'arrête. Une chaîne automatique retirée à la main n'est plus reprise ; « Garder » la transforme en chaîne manuelle.
-
-Une fois ton compte créé, mets `ALLOW_SIGNUP="false"` dans `.env` puis `docker compose up -d` si tu es le seul utilisateur.
 
 ### Mise en ligne avec HTTPS
 
@@ -153,6 +173,8 @@ Chaque seconde de live produit trois mesures, comparées à la **ligne de base d
 
 Les écarts sont combinés et lissés sur 5 secondes (un simple coup de feu ne suffit pas), puis les pics au-dessus du seuil deviennent des clips, avec du contexte avant et des coupes calées sur les silences. Si l'IA est activée, elle note aussi le contenu à partir de ce qui se dit.
 
+Sur Kick, YouTube et TikTok, le chat n'est pas lu : la détection repose sur le son et l'image, et sera donc un peu moins fine que sur Twitch. (Kick ne propose officiellement la lecture du chat que par webhooks vers une adresse publique ; le websocket utilisé par son site n'est pas documenté et peut changer sans prévenir, il n'a donc pas été retenu.)
+
 Tout se règle dans **Réglages** : sensibilité, durées, nombre max de clips par heure, mise en page, police et couleur des sous-titres.
 
 ## Comment le clip est monté
@@ -180,14 +202,38 @@ En plus des clips verticaux, Cliping assemble des **compilations horizontales 19
 - **Publication** : sur une chaîne YouTube connectée, en vidéo classique (pas un Short), maintenant ou programmée, avec la miniature personnalisée. YouTube n'accepte les miniatures personnalisées que des chaînes vérifiées (youtube.com/verify) : sinon la vidéo part quand même et la publication l'indique. Une compilation compte dans le plafond de publications sur 24 h du compte.
 - **Durée de montage** : 74 s pour 10 moments (vidéo de 3 min 12) sur 4 cœurs, environ 90 s avec la préparation du titre et de la miniature.
 
-Sur Kick, YouTube et TikTok, le chat n'est pas lu : la détection repose sur le son et l'image, et sera donc un peu moins fine que sur Twitch. (Kick ne propose officiellement la lecture du chat que par webhooks vers une adresse publique ; le websocket utilisé par son site n'est pas documenté et peut changer sans prévenir, il n'a donc pas été retenu.)
+
+## Performances : mesurer ce qui marche
+
+Les algorithmes des plateformes ne sont pas publics. Ce que Cliping peut faire d'honnête, c'est relever ce que deviennent **tes** publications et te montrer ce qui marche sur **tes** comptes.
+
+- **Relevé automatique** des vues, likes, commentaires (et partages sur TikTok) de chaque publication en ligne, toutes les 15 minutes au début puis de plus en plus espacé, pendant 90 jours.
+- **Page Performances** : totaux et tendance, courbe des vues par compte, comparaison des comptes, meilleurs clips, démarrage des dernières publications (vues à 1 h, 6 h et 24 h comparées à l'habitude du compte).
+- **« Ce qui marche chez toi »** : quels streamers, quelles durées, quels créneaux, quels styles d'accroche donnent les meilleurs résultats. Médianes, taille d'échantillon affichée, et aucune conclusion en dessous de 5 publications par groupe. Ce sont des constats, pas des lois.
+
+À savoir : YouTube est suivi sans rien configurer. TikTok demande le droit `video.list` (voir plus haut). Une vidéo envoyée en **brouillon TikTok** ne peut pas être suivie (TikTok ne renvoie pas son identifiant), pas plus que les Reels Instagram ni les compilations : la page le dit au lieu d'afficher des zéros.
+
+## Conseils : faire grandir un compte
+
+Page **Conseils**, quatre onglets :
+
+- **Guide** : une quarantaine de conseils en liste de contrôle (accroche, durée, titres, hashtags, horaires, commentaires, bio, séries, plusieurs comptes, droits, plan pour la sortie de GTA 6). Chacun est marqué **Officiel** (la plateforme le dit, avec le lien) ou **Usage** (pratique courante, sans garantie).
+- **Plateformes** : comment TikTok, YouTube Shorts et YouTube classique disent choisir ce qu'ils montrent, un mémo côte à côte, et la répartition entre plusieurs comptes.
+- **Bio et profil** : bios, noms et pseudos proposés pour chaque compte, dans les limites de caractères de chaque plateforme.
+- **Répondre** : colle un commentaire, choisis un ton, récupère trois réponses.
+
+Avec `ANTHROPIC_API_KEY`, ces textes sont rédigés pour ton compte et ton clip ; sans clé, ce sont des modèles génériques clairement étiquetés. Aucun conseil ne promet de vues, et rien n'est fait pour contourner la détection de contenu dupliqué.
 
 ## Ce qui a été vérifié, et ce qui ne l'a pas été
 
 Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e2e/`) :
 
 - détection du live, enregistrement, analyse, détection des moments, découpe exacte à l'image près, montage 1080×1920 avec sous-titres, nettoyage du disque, arrêt propre ;
-- import de replay, retouche et remontage d'un clip depuis l'interface, lecture vidéo, pages sur ordinateur et mobile ;
+- import de replay, retouche et remontage d'un clip depuis l'interface, lecture vidéo ;
+- montage : ouverture sur le pic, coupe des temps morts avec son et sous-titres synchronisés à moins d'une image près, textes dans la zone sûre, cinq styles de sous-titres (images extraites et contrôlées) ;
+- toutes les pages sur ordinateur (1440 px) et mobile (390 px), sans erreur ni débordement, avec les huit chantiers réunis ;
+- planification en lot, pilote automatique (simulation, vrai mode, plafonds, délai de grâce, arrêt immédiat) avec de faux comptes : aucune publication réelle n'est partie ;
+- migrations de base de données rejouées sur une base vierge, identiques au schéma ;
 - compilations : montage de 10 moments, durée exacte, chapitres calés sur le début de chaque moment et sous-titres synchronisés (vérifiés image par image sur le chrono incrusté du flux de test, `tests/e2e/seed-moments.ts`), niveau sonore homogène (sources de -41 à -21 LUFS → -14 ±0,2 LUFS).
 
 **Non vérifié en conditions réelles**, faute d'accès depuis l'environnement de développement :
@@ -195,7 +241,10 @@ Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e
 - la capture de vrais lives Twitch, Kick et YouTube (elle repose sur `streamlink`, l'outil de référence, mais n'a pas pu être essayée ici) ;
 - la connexion et la publication Instagram Reels : écrites d'après des extraits de la documentation de Meta (site développeur injoignable depuis l'environnement de développement) et des guides tiers pour les codes d'erreur, testées contre un faux Instagram (y compris le téléchargement réel de la vidéo par le lien signé), jamais avec un vrai compte ni une vraie application Meta ;
 - les envois vers YouTube et TikTok (compilations et miniatures comprises) : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
-- l'appel à Claude et à l'API de transcription ;
+- l'appel à Claude (titres, accroches avec images du clip, kit de publication, bios, compilations) et à l'API de transcription : aucune clé dans l'environnement de développement, seuls les replis sans IA ont tourné ;
+- le relevé des performances contre de vrais comptes YouTube ou TikTok (testé contre un réseau simulé et des données fictives) ;
+- l'installation de l'app sur un vrai iPhone, et le mode validation au doigt dans Safari (testés dans un navigateur de bureau qui simule un mobile) ;
+- les seuils de coupe des temps morts et de détection sur de vrais streams et de la vraie parole (calés sur des signaux de synthèse) ;
 - la capture de TikTok Live (plugin `tiktok` de streamlink 8.6, fragile car TikTok change souvent son site) et le téléchargement de vrais clips Twitch/Kick/TikTok/Shorts par yt-dlp (extracteurs présents dans la version installée, mais sites injoignables ici). L'import d'un clip court a été vérifié de bout en bout avec des fichiers servis localement ;
 - l'annuaire des lives Twitch (API Helix, jeton d'application) et Kick (API publique `api.kick.com/public/v1`) : écrits d'après leur documentation, testés uniquement contre un faux annuaire. Pour Kick, les noms exacts des paramètres de `/livestreams` (`category_id`, `language`, `sort`) n'ont pu être confirmés que par des bibliothèques tierces ;
 - « Tester la connexion » : vérifié contre les vrais serveurs de Google avec un jeton invalide (→ « reconnecte le compte ») ; TikTok injoignable ;
@@ -218,6 +267,16 @@ Fais un essai complet avec un compte secondaire avant le jour J, et règle la se
 - `MAX_CONCURRENT_RECORDINGS`, `JOB_CONCURRENCY` et la qualité de capture par chaîne (`720p60,best`) permettent d'ajuster à ton serveur.
 
 ## Développement
+
+Le plus simple, dans un conteneur ou une machine Linux avec Postgres 16 et ffmpeg :
+
+```bash
+scripts/dev-setup.sh            # base locale, dépendances, migrations, compte de démo, faux live de test
+scripts/dev-up.sh live          # faux services + worker + site sur http://localhost:3000, chaîne de démo « en live »
+scripts/dev-up.sh stop
+```
+
+À la main :
 
 ```bash
 npm install
@@ -262,16 +321,22 @@ src/worker/                 le bot
   render/                     sous-titres ASS et montage ffmpeg
   vod.ts, publish.ts          import de replays, publication
   compilation.ts              compilations horizontales (montage : render/compilation.ts ; logique pure : src/lib/compilation.ts)
+  stats.ts                    relevé des performances (calculs : src/lib/stats/)
+  automation.ts               pilote automatique et envoi des notifications (décisions : src/lib/autopilot.ts, src/lib/notify-plan.ts)
+src/lib/coach/              contenu du guide, limites par plateforme, génération des bios et des kits
+src/components/             phone-preview (aperçu téléphone), review-deck (mode validation), charts, publish-timeline…
 tests/                      tests unitaires + banc d'essai de bout en bout
 ```
 
 ## Pas encore là
 
 - Paiement et abonnements (Stripe) : l'app est multi-utilisateurs, mais sans facturation.
-- Instagram Reels et autres plateformes : l'interface d'adaptateur (`src/lib/platforms/types.ts`) est prévue pour en ajouter.
+- D'autres destinations (Facebook Reels, Snapchat Spotlight, X…) : l'interface d'adaptateur (`src/lib/platforms/types.ts`) est prévue pour en ajouter.
 - Lecture du chat Kick, YouTube et TikTok.
+- Statistiques des Reels Instagram et des compilations dans la page Performances.
+- Musique de fond et bruitages (il faudrait des sons sous licence).
 - Stockage externe (S3/R2) : les vidéos sont sur le disque du serveur.
 
 ---
 
-Cliping n'est affilié ni à Rockstar Games, ni à Twitch, Kick, YouTube ou TikTok.
+Cliping n'est affilié ni à Rockstar Games, ni à Twitch, Kick, YouTube, TikTok, Instagram ou Meta.

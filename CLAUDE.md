@@ -1,6 +1,6 @@
 # Cliping — guide pour travailler dans ce dépôt
 
-Cliping surveille des streamers (Twitch, Kick, YouTube), enregistre leurs lives, repère les moments forts, les monte en clips verticaux sous-titrés, et permet de les publier sur des comptes TikTok et YouTube Shorts. Le contexte produit et l'état de ce qui est vérifié ou non sont dans `README.md` : lis-le en premier.
+Cliping surveille des streamers (Twitch, Kick, YouTube, TikTok Live), enregistre leurs lives, repère les moments forts, les monte en clips verticaux sous-titrés, et permet de les publier sur des comptes TikTok, YouTube Shorts et Instagram Reels. S'y ajoutent des compilations horizontales pour YouTube classique, un pilote automatique avec notifications, le suivi des performances et un guide de conseils. Le contexte produit et l'état de ce qui est vérifié ou non sont dans `README.md` : lis-le en premier.
 
 L'utilisateur est francophone et non développeur : l'interface, les messages d'erreur, les commentaires de code et les messages de commit sont **en français**, dans un registre direct (tutoiement dans l'interface).
 
@@ -19,6 +19,8 @@ Twitch, Kick, TikTok et YouTube (hors API Google) ne sont pas joignables depuis 
 
 ## Vérifier avant de dire que c'est fini
 
+Après un `git pull`, une fusion ou un changement de branche, **relance le serveur de développement** (`scripts/dev-up.sh`) : il garde d'anciens modules en mémoire et affiche alors des erreurs qui n'existent pas dans le code.
+
 ```bash
 npm run typecheck && npm test && npx next build
 ```
@@ -36,13 +38,21 @@ Dis clairement dans ton rapport ce que tu n'as pas pu vérifier (appels à des s
 ```
 prisma/schema.prisma     modèle de données (Postgres)
 src/app/                 site Next.js 16 (App Router) : pages, actions serveur (src/app/actions), routes OAuth et média
-src/components/          composants ; ui.tsx = briques de base, action-form.tsx = formulaires reliés aux actions
-src/lib/                 partagé site + worker : db, session, crypto, jobs (file Postgres), settings, platforms/
-src/worker/              le bot : monitor → recorder → analysis/detector → pipeline/clip → render/ ; vod.ts ; publish.ts
-tests/                   vitest (unitaires) + tests/e2e (banc d'essai)
+src/components/          composants ; ui.tsx = briques de base, action-form.tsx = formulaires reliés aux actions,
+                         phone-preview (aperçu téléphone), review-deck (mode validation), charts, publish-timeline
+src/lib/                 partagé site + worker : db, session, crypto, jobs (file Postgres), settings
+  platforms/               adaptateurs YouTube, TikTok, Instagram (OAuth, envoi, suivi)
+  schedule.ts, batch.ts    planification en lot (même code pour l'aperçu, la validation serveur et le pilote)
+  autopilot.ts             décisions du pilote (fonction pure) ; notify-plan.ts, notify/ : notifications
+  stats/                   relevé et analyse des performances
+  coach/                   guide, limites par plateforme, génération des bios et des kits
+  compilation.ts           logique pure des compilations (ordre, chapitres, plan de montage)
+src/worker/              le bot : monitor → recorder → analysis/detector → pipeline/clip → render/
+                         vod.ts, publish.ts, discovery.ts, compilation.ts, stats.ts, automation.ts
+tests/                   vitest (unitaires) + tests/e2e (banc d'essai, scripts de données fictives)
 ```
 
-Le site et le worker ne se parlent que par la base (tables `Job`, `KeyValue`, et les modèles métier). Les vidéos sont sur disque dans `DATA_DIR` (`clips/<id>/{source,final}.mp4`).
+Le site et le worker ne se parlent que par la base (tables `Job`, `KeyValue`, et les modèles métier). Les vidéos sont sur disque dans `DATA_DIR` (`clips/<id>/{source,final}.mp4`, `compilations/<id>/`).
 
 ## Conventions
 
@@ -53,6 +63,9 @@ Le site et le worker ne se parlent que par la base (tables `Job`, `KeyValue`, et
 - **Dates** : le serveur ne connaît pas le fuseau de l'utilisateur. Durées relatives (`ago()`) côté serveur, heures absolues via `<LocalTime>` côté client.
 - **Processus externes** : toujours `run()`/`runOk()` de `src/worker/proc.ts` (pas de shell, pas d'interpolation). Les URL fournies par l'utilisateur passent par `isAllowedSourceUrl()` (anti-SSRF).
 - **Secrets** : les jetons OAuth sont chiffrés (`encrypt`/`decrypt`). Rien de secret dans les journaux ni dans le dépôt.
+- **Publications** : une `Publication` porte soit un clip (`clipId`), soit une compilation (`compilationId`), jamais les deux. Tout code qui lit `publication.clip` doit gérer `null`.
+- **Plateformes** : `SocialPlatform` a trois valeurs. Un `Record<SocialPlatform, …>` doit les couvrir toutes ; une fonction qui ne gère qu'une partie des plateformes le dit explicitement (voir `trackability()` dans `src/lib/stats/platforms.ts`).
+- **Tâches** : un type de tâche par ligne dans `src/lib/jobs.ts`, son gestionnaire dans `src/worker/index.ts`.
 - **Base** : toute évolution du schéma passe par `npx prisma migrate dev --name <nom>` (une migration ajoutée, jamais une migration existante modifiée). N'enlève ni ne renomme une colonne existante sans nécessité.
 - **Dépendances** : n'en ajoute que si elle apporte vraiment quelque chose ; pas de bibliothèque lourde pour ce qui tient en quelques dizaines de lignes.
 - **IA (Claude)** : charge le skill `claude-api` avant d'écrire du code qui appelle l'API. Le modèle vient de `env.ai.model` (défaut `claude-opus-5-5`) ; suis le patron de `src/worker/ai.ts` (sorties structurées, repli côté serveur sauf sur Haiku, dégradation propre sans clé).
