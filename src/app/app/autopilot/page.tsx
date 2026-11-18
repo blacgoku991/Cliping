@@ -170,7 +170,7 @@ export default async function AutopilotPage() {
             {upcoming.map((p) => (
               <li key={p.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
                 <div className="min-w-0 flex-1">
-                  <Link href={`/app/clips/${p.clip.id}`} className="block truncate text-sm font-medium hover:underline">{p.clip.title || "Clip sans titre"}</Link>
+                  <Link href={p.clip ? `/app/clips/${p.clip.id}` : "/app/queue"} className="block truncate text-sm font-medium hover:underline">{p.clip?.title || p.title || "Clip sans titre"}</Link>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                     <span className="flex items-center gap-1"><SocialIcon platform={p.account.platform} className="size-3.5" /> {p.account.displayName}</span>
                     <LocalTime iso={p.scheduledAt.toISOString()} />
@@ -179,7 +179,7 @@ export default async function AutopilotPage() {
                 </div>
                 <form action={cancelPilotPublication}>
                   <input type="hidden" name="id" value={p.id} />
-                  <Button type="submit" size="sm" variant="ghost" aria-label={`Annuler « ${p.clip.title} »`}><X className="size-3.5" /> Annuler</Button>
+                  <Button type="submit" size="sm" variant="ghost" aria-label={`Annuler « ${p.clip?.title || p.title} »`}><X className="size-3.5" /> Annuler</Button>
                 </form>
               </li>
             ))}

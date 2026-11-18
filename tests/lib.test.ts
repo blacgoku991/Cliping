@@ -17,7 +17,12 @@ describe("crypto", () => {
     expect(enc).not.toContain("secret-token");
     expect(decrypt(enc)).toBe("ya29.secret-token");
     expect(encrypt("x")).not.toBe(encrypt("x")); // IV aléatoire
-    const tampered = enc.slice(0, -2) + (enc.endsWith("A") ? "B" : "A") + enc.slice(-1);
+    // On modifie à coup sûr le premier caractère des données chiffrées (un caractère tiré au hasard
+    // pouvait être remplacé par lui-même une fois sur 64, et le test échouait alors à tort).
+    const parts = enc.split(".");
+    const data = parts[3]!;
+    const tampered = [...parts.slice(0, 3), (data.startsWith("A") ? "B" : "A") + data.slice(1)].join(".");
+    expect(tampered).not.toBe(enc);
     expect(() => decrypt(tampered)).toThrow();
   });
   it("vérifie les mots de passe", async () => {

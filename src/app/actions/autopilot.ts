@@ -138,7 +138,7 @@ export async function cancelPilotPublication(form: FormData): Promise<void> {
   if (!pub) return;
   const res = await db.publication.updateMany({ where: { id, userId: user.id, status: "QUEUED" }, data: { status: "CANCELED", note: "Annulée à la main." } });
   if (res.count) {
-    await db.autopilotLog.create({ data: { userId: user.id, kind: "cancel", publicationId: id, clipId: pub.clipId, accountId: pub.accountId, message: `Tu as annulé « ${pub.clip.title} » : le pilote ne le reprogrammera pas.` } });
+    await db.autopilotLog.create({ data: { userId: user.id, kind: "cancel", publicationId: id, clipId: pub.clipId, accountId: pub.accountId, message: `Tu as annulé « ${pub.clip?.title || pub.title} » : le pilote ne le reprogrammera pas.` } });
   }
   revalidate();
 }
