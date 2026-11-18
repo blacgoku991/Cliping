@@ -153,6 +153,20 @@ export function templateProfile(platform: SocialPlatform, input: ProfileInput, g
 
 // ───────────────────────── Kit de publication ─────────────────────────
 
+const GAME_ALIASES: Array<[RegExp, string]> = [
+  [/^grand theft auto vi$/i, "GTA 6"],
+  [/^grand theft auto v$/i, "GTA 5"],
+  [/^grand theft auto online$/i, "GTA Online"],
+  [/^just chatting$/i, ""],
+];
+
+/** Nom de jeu tel qu'on l'écrit dans un titre (« Grand Theft Auto VI » → « GTA 6 »). */
+export function gameLabel(category: string | null | undefined): string {
+  const c = (category ?? "").trim();
+  for (const [re, alias] of GAME_ALIASES) if (re.test(c)) return alias;
+  return c;
+}
+
 export interface ClipContext {
   streamer: string;
   /** Plateforme de stream (Twitch, Kick, YouTube) */
@@ -253,7 +267,7 @@ const REPLY_TEMPLATES: Record<Tone, ReplyIdea[]> = {
 /** Kit générique : construit à partir du titre et des métadonnées déjà présentes sur le clip. */
 export function templateKit(ctx: ClipContext, platforms: SocialPlatform[], tone: Tone = "chaleureux"): Omit<PublishKit, "generatedAt"> {
   const who = ctx.streamer || "le streamer";
-  const game = ctx.game || "ce jeu";
+  const game = gameLabel(ctx.game) || "ce jeu";
   const vars = { who, game };
   const credit = ctx.streamer ? `🎥 Extrait du live de ${ctx.streamer}${ctx.sourcePlatform ? ` sur ${ctx.sourcePlatform}` : ""}` : "🎥 Extrait de live";
   const out: PublishKit["platforms"] = {};
