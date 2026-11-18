@@ -21,14 +21,19 @@ model User {
   coach        Json     @default("{}")
   createdAt    DateTime @default(now())
 
-  sessions     Session[]
-  streamers    Streamer[]
-  recordings   Recording[]
-  clips        Clip[]
-  accounts     SocialAccount[]
-  publications Publication[]
-  discovery    Discovery?
-  compilations Compilation[]
+  sessions       Session[]
+  streamers      Streamer[]
+  recordings     Recording[]
+  clips          Clip[]
+  accounts       SocialAccount[]
+  publications   Publication[]
+  discovery      Discovery?
+  compilations   Compilation[]
+  autopilot      Autopilot?
+  autopilotLog   AutopilotLog[]
+  notifySettings NotifySettings?
+  notifyChannels NotifyChannel[]
+  notifications  Notification[]
 }
 
 model Session {
@@ -279,6 +284,8 @@ model Publication {
   /// État d'envoi repris en cas de nouvelle tentative (URI de session d'upload…)
   uploadState   Json?
   error         String?
+  /// Vrai = programmée par le pilote automatique (annulable pendant le délai de grâce, arrêt d'urgence)
+  autopilot     Boolean           @default(false)
   createdAt     DateTime          @default(now())
 
   /// Suivi des performances (voir src/worker/stats.ts) : dernier relevé connu
@@ -407,6 +414,103 @@ model Discovery {
   updatedAt  DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────── Pilote automatique ─────────────────────────
+
+/// Règles du pilote (voir src/lib/autopilot.ts). Désactivé par défaut, simulation par défaut.
+model Autopilot {
+  userId    String    @id
+  enabled   Boolean   @default(false)
+  /// Vrai = le pilote décide et note dans le journal, sans rien approuver ni programmer
+  dryRun    Boolean   @default(true)
+  /// Règles et garde-fous {minScore, autoSchedule, streamers, accounts, gapMin, globalDailyCap…}
+  config    Json      @default("{}")
+  /// État interne {paused: {accountId: raison}}
+  state     Json      @default("{}")
+  enabledAt DateTime?
+  stoppedAt DateTime?
+  lastRunAt DateTime?
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Journal lisible de tout ce que le pilote a fait (ou aurait fait, en simulation) et pourquoi.
+model AutopilotLog {
+  id            String    @id @default(cuid())
+  userId        String
+  at            DateTime  @default(now())
+  /// approve | schedule | skip | pause | resume | stop | start | config | cancel
+  kind          String
+  dryRun        Boolean   @default(false)
+  message       String
+  clipId        String?
+  accountId     String?
+  publicationId String?
+  /// Horodatage prévu (programmation), y compris en simulation
+  plannedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, at])
+}
+
+// ───────────────────────── Notifications ─────────────────────────
+
+/// Préférences {types: {clipReady, publishFailed, accountInvalid, digest, autopilot}, quiet: {from, to}, groupMin, digestHour, tz}
+model NotifySettings {
+  userId     String    @id
+  prefs      Json      @default("{}")
+  /// Les événements antérieurs ne déclenchent rien (pas de rafale à l'activation)
+  since      DateTime  @default(now())
+  lastSentAt DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Un canal de réception : WEBPUSH (app installée), NTFY, DISCORD. Configuration chiffrée.
+model NotifyChannel {
+  id         String    @id @default(cuid())
+  userId     String
+  kind       String
+  label      String
+  configEnc  String
+  /// Empreinte de l'adresse de destination (évite les doublons d'abonnement)
+  targetHash String
+  enabled    Boolean   @default(true)
+  lastOkAt   DateTime?
+  lastError  String?
+  failures   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetHash])
+}
+
+/// Événements à notifier (et historique). refKey évite d'annoncer deux fois la même chose.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  /// clipReady | publishFailed | accountInvalid | digest | autopilot | test
+  type      String
+  refKey    String
+  title     String
+  body      String
+  url       String    @default("/app")
+  /// PENDING | SENT | SKIPPED
+  status    String    @default("PENDING")
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+  /// Message groupé dans lequel cet événement est parti
+  sentAs    String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, refKey])
+  @@index([userId, status])
 }
 
 // ───────────────────────── File de tâches (Postgres, SKIP LOCKED) ─────────────────────────

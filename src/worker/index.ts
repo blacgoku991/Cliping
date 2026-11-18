@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { claimJob, completeJob, failJob, requeueStaleJobs, type JobPayloads, type JobType } from "@/lib/jobs";
 import { renewExpiringTokens } from "@/lib/platforms";
 import { ensureDir } from "@/lib/storage";
+import { AUTOMATION_INTERVAL_SEC, automationTick } from "./automation";
 import { cleanup } from "./cleanup";
 import { markCompilationFailed, renderCompilation } from "./compilation";
 import { DISCOVERY_INTERVAL_SEC, discoveryEnabled, refreshDiscovery } from "./discovery";
@@ -110,6 +111,14 @@ async function discoveryLoop(): Promise<void> {
   }
 }
 
+/** Pilote automatique et notifications : observent la base à intervalle régulier. */
+async function automationLoop(): Promise<void> {
+  while (!shuttingDown) {
+    await automationTick().catch((err) => log("automation", `erreur : ${err instanceof Error ? err.message : err}`));
+    await sleep(AUTOMATION_INTERVAL_SEC * 1000);
+  }
+}
+
 async function heartbeatLoop(): Promise<void> {
   let lastCleanup = 0;
   while (!shuttingDown) {
@@ -196,6 +205,7 @@ async function main(): Promise<void> {
     heartbeatLoop(),
     discoveryLoop(),
     statsLoop(() => shuttingDown),
+    automationLoop(),
   ]);
 }
 
