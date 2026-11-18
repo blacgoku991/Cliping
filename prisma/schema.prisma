@@ -28,6 +28,7 @@ model User {
   accounts     SocialAccount[]
   publications Publication[]
   discovery    Discovery?
+  compilations Compilation[]
 }
 
 model Session {
@@ -199,6 +200,7 @@ model Clip {
   recording    Recording?    @relation(fields: [recordingId], references: [id], onDelete: SetNull)
   streamer     Streamer?     @relation(fields: [streamerId], references: [id], onDelete: SetNull)
   publications Publication[]
+  compilationItems CompilationItem[]
 
   @@index([userId, status, createdAt])
   @@index([userId, createdAt])
@@ -253,10 +255,13 @@ enum PublicationStatus {
   CANCELED
 }
 
+/// Une publication porte soit un clip (vertical), soit une compilation (vidéo YouTube classique) :
+/// exactement l'un des deux est renseigné (contrainte CHECK dans la migration).
 model Publication {
   id          String            @id @default(cuid())
   userId      String
-  clipId      String
+  clipId      String?
+  compilationId String?
   accountId   String
   status      PublicationStatus @default(QUEUED)
   title       String
@@ -276,10 +281,73 @@ model Publication {
   createdAt   DateTime          @default(now())
 
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clip    Clip          @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  clip    Clip?         @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  compilation Compilation? @relation(fields: [compilationId], references: [id], onDelete: Cascade)
   account SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([clipId])
+  @@index([compilationId])
+}
+
+// ───────────────────────── Compilations « best-of » (vidéo YouTube horizontale) ─────────────────────────
+
+enum CompilationStatus {
+  DRAFT
+  RENDERING
+  READY
+  FAILED
+}
+
+model Compilation {
+  id          String            @id @default(cuid())
+  userId      String
+  status      CompilationStatus @default(DRAFT)
+  title       String            @default("")
+  description String            @default("")
+  tags        String[]          @default([])
+  /// Texte court incrusté sur la miniature (2 à 4 mots)
+  thumbText   String            @default("")
+  /// Vrai = titre, description et texte de miniature encore à proposer (IA ou valeurs par défaut) au prochain montage
+  metaPending Boolean           @default(true)
+  /// Numérotation « compte à rebours » (#10 → #1, le meilleur à la fin) ; faux = 1, 2, 3…
+  countdown   Boolean           @default(true)
+  captions    Boolean           @default(true)
+  /// Ouverture : flash du meilleur moment + titre
+  intro       Boolean           @default(true)
+  /// D'où vient la proposition {kind: "recording"|"streamer"|"day"|"manual", id?, label}
+  origin      Json              @default("{}")
+  /// Résultat du dernier montage {duration, intro, outro, moments:[{clipId, at, duration, label}], renderMs}
+  montage     Json?
+  /// Chapitres du dernier montage [{at, title}] (vide si YouTube ne les afficherait pas)
+  chapters    Json?
+  hasFinal    Boolean           @default(false)
+  hasThumb    Boolean           @default(false)
+  progress    Float             @default(0)
+  renderedAt  DateTime?
+  error       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        CompilationItem[]
+  publications Publication[]
+
+  @@index([userId, createdAt])
+}
+
+model CompilationItem {
+  id            String @id @default(cuid())
+  compilationId String
+  clipId        String
+  position      Int
+  /// Titre du moment (repère à l'écran et chapitre YouTube)
+  label         String @default("")
+
+  compilation Compilation @relation(fields: [compilationId], references: [id], onDelete: Cascade)
+  clip        Clip        @relation(fields: [clipId], references: [id], onDelete: Cascade)
+
+  @@unique([compilationId, clipId])
   @@index([clipId])
 }
 

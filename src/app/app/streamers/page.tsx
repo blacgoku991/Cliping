@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Download, Eye, Radio, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { createFromProposal } from "@/app/actions/compilations";
 import { addStreamer, deleteRecording, deleteStreamer, importVod, keepStreamer, toggleStreamer, updateStreamer } from "@/app/actions/streamers";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { SourceIcon } from "@/components/brand";
@@ -196,6 +197,15 @@ export default async function StreamersPage() {
                         ? `Clip importé tel quel · ${duration(r.durationSec)} · `
                         : r.status === "DONE" ? `${duration(r.durationSec)} analysées · ${r._count.clips} clip${r._count.clips > 1 ? "s" : ""} · ` : ""}{ago(r.startedAt)}
                     </span>
+                    {r.status === "DONE" && r._count.clips >= 3 && (r.options as { kind?: string } | null)?.kind !== "clip" ? (
+                      <form action={createFromProposal}>
+                        <input type="hidden" name="kind" value="recording" />
+                        <input type="hidden" name="id" value={r.id} />
+                        <SubmitButton size="sm" pendingLabel="Préparation…" title="Compilation horizontale des meilleurs moments pour YouTube">
+                          <Sparkles className="size-3.5" /> Faire le best-of
+                        </SubmitButton>
+                      </form>
+                    ) : null}
                     {!running ? (
                       <form action={deleteRecording}>
                         <input type="hidden" name="id" value={r.id} />

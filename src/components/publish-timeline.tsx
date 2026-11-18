@@ -18,6 +18,8 @@ export interface TimelinePub {
   id: string;
   accountId: string;
   clipId: string;
+  /** Lien à ouvrir à la place de la page du clip (publication d'une compilation) */
+  href?: string;
   title: string;
   status: string;
   /** Heure de mise en ligne (publiée) ou prévue, en ms */
@@ -170,7 +172,7 @@ export function PublishTimeline({ accounts, pubs }: { accounts: TimelineAccount[
                     return (
                       <Link
                         key={p.id}
-                        href={`/app/clips/${p.clipId}`}
+                        href={p.href ?? `/app/clips/${p.clipId}`}
                         onMouseEnter={() => setHover(p.id)}
                         onMouseLeave={() => setHover(null)}
                         onFocus={() => setHover(p.id)}

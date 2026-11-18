@@ -26,7 +26,11 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
     where: { userId: user.id },
     orderBy: [{ scheduledAt: "desc" }],
     take: 100,
-    include: { account: true, clip: { select: { id: true, title: true, hasFinal: true, renderedAt: true } } },
+    include: {
+      account: true,
+      clip: { select: { id: true, title: true, hasFinal: true, renderedAt: true } },
+      compilation: { select: { id: true, hasThumb: true, renderedAt: true } },
+    },
   });
   const live = pubs.some((p) => ["QUEUED", "UPLOADING", "PROCESSING"].includes(p.status));
 
@@ -50,12 +54,17 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
           <ul className="divide-y divide-line">
             {pubs.map((p) => {
               const s = STATUS[p.status] ?? { label: p.status, tone: "neutral" as Tone };
+              // Une publication porte un clip vertical ou une compilation (vidéo YouTube classique, miniature 16:9).
+              const href = p.compilation ? `/app/compilations/${p.compilation.id}` : `/app/clips/${p.clip?.id ?? ""}`;
+              const thumb = p.compilation
+                ? p.compilation.hasThumb ? `/api/compilations/${p.compilation.id}/thumb.jpg?v=${p.compilation.renderedAt?.getTime() ?? 0}` : null
+                : p.clip?.hasFinal ? `/api/media/${p.clip.id}/thumb.jpg?v=${p.clip.renderedAt?.getTime() ?? 0}` : null;
               return (
                 <li key={p.id} className="flex gap-4 px-4 py-4 sm:px-5">
-                  <Link href={`/app/clips/${p.clip.id}`} className="block aspect-[9/16] w-12 shrink-0 overflow-hidden rounded-lg bg-surface-2">
-                    {p.clip.hasFinal ? (
+                  <Link href={href} className={`block shrink-0 overflow-hidden rounded-lg bg-surface-2 ${p.compilation ? "aspect-video w-24 self-start" : "aspect-[9/16] w-12"}`}>
+                    {thumb ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`/api/media/${p.clip.id}/thumb.jpg?v=${p.clip.renderedAt?.getTime() ?? 0}`} alt="" loading="lazy" className="size-full object-cover" />
+                      <img src={thumb} alt="" loading="lazy" className="size-full object-cover" />
                     ) : null}
                   </Link>
                   <div className="min-w-0 flex-1">
@@ -64,11 +73,12 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
                       <span className="flex items-center gap-1.5 text-sm text-muted">
                         <SocialIcon platform={p.account.platform} className="size-3.5" /> {p.account.displayName}
                       </span>
+                      {p.compilation ? <Badge tone="brand">Compilation · vidéo</Badge> : null}
                       <span className="text-xs text-faint">
                         {p.status === "PUBLISHED" && p.publishedAt ? <LocalTime iso={p.publishedAt.toISOString()} /> : <>prévu le <LocalTime iso={p.scheduledAt.toISOString()} /></>}
                       </span>
                     </div>
-                    <Link href={`/app/clips/${p.clip.id}`} className="mt-1.5 block truncate text-sm font-medium hover:underline">{p.title}</Link>
+                    <Link href={href} className="mt-1.5 block truncate text-sm font-medium hover:underline">{p.title}</Link>
                     {p.error ? <p className="mt-1 break-words text-xs text-bad">{p.error}</p> : null}
                     {p.note ? <p className="mt-1 text-xs text-muted">{p.note}</p> : null}
                   </div>

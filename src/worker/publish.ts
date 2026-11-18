@@ -3,7 +3,10 @@ import { db } from "@/lib/db";
 import { enqueue, PermanentError } from "@/lib/jobs";
 import { accessTokenFor, PLATFORMS, PlatformRejectedError, ReauthRequiredError } from "@/lib/platforms";
 import type { PublishResult } from "@/lib/platforms/types";
+import { chaptersValid, fullDescription, type Chapter } from "@/lib/compilation";
+import { compilationFile } from "@/lib/compilation-files";
 import { clipFile, fileSize } from "@/lib/storage";
+import { compilationCredits } from "@/lib/compilation-credits";
 import { log } from "./proc";
 
 async function applyResult(publicationId: string, accountId: string, result: PublishResult): Promise<void> {
@@ -34,27 +37,69 @@ function classify(err: unknown, label: string): unknown {
   return err;
 }
 
-/** Envoie un clip sur un compte social. */
-export async function publish(publicationId: string): Promise<void> {
-  const pub = await db.publication.findUnique({ where: { id: publicationId }, include: { clip: true, account: true } });
-  if (!pub || pub.status === "CANCELED" || pub.status === "PUBLISHED") return;
-  const adapter = PLATFORMS[pub.account.platform];
+/** Ce qu'il faut envoyer : le clip vertical, ou la compilation horizontale avec sa miniature et sa description complète. */
+async function contentOf(pub: NonNullable<Awaited<ReturnType<typeof loadPublication>>>) {
+  if (pub.compilationId) {
+    const c = pub.compilation;
+    const file = compilationFile(pub.compilationId, "final");
+    const size = await fileSize(file);
+    if (!c || !c.hasFinal || !size) throw new PermanentError("La compilation n'a pas de vidéo montée (supprimée ou montage échoué).");
+    if (pub.account.platform !== "YOUTUBE") throw new PermanentError("Une compilation ne se publie que sur YouTube (vidéo classique).");
+    const montage = (c.montage ?? {}) as { duration?: number };
+    const total = montage.duration ?? 0;
+    const chapters = Array.isArray(c.chapters) ? (c.chapters as unknown as Chapter[]) : [];
+    const thumb = compilationFile(pub.compilationId, "thumb");
+    return {
+      filePath: file,
+      fileSize: size,
+      // La description est complétée à l'envoi : chapitres et crédits correspondent toujours au dernier montage.
+      description: fullDescription({
+        text: pub.description,
+        chapters: chaptersValid(chapters, total) ? chapters : [],
+        total,
+        credits: await compilationCredits(pub.compilationId),
+        tags: c.tags,
+      }),
+      hashtags: c.tags,
+      durationSec: total,
+      format: "video" as const,
+      thumbnailPath: c.hasThumb && (await fileSize(thumb)) ? thumb : null,
+    };
+  }
+  if (!pub.clipId || !pub.clip) throw new PermanentError("Le clip de cette publication a été supprimé.");
   const file = clipFile(pub.clipId, "final");
   const size = await fileSize(file);
   if (!pub.clip.hasFinal || !size) throw new PermanentError("Le clip n'a pas de vidéo montée (supprimée ou montage échoué).");
+  return {
+    filePath: file,
+    fileSize: size,
+    description: pub.description,
+    hashtags: pub.clip.hashtags,
+    durationSec: pub.clip.endSec - pub.clip.startSec,
+    format: "short" as const,
+    thumbnailPath: null,
+  };
+}
+
+function loadPublication(publicationId: string) {
+  return db.publication.findUnique({ where: { id: publicationId }, include: { clip: true, compilation: true, account: true } });
+}
+
+/** Envoie un clip (ou une compilation) sur un compte social. */
+export async function publish(publicationId: string): Promise<void> {
+  const pub = await loadPublication(publicationId);
+  if (!pub || pub.status === "CANCELED" || pub.status === "PUBLISHED") return;
+  const adapter = PLATFORMS[pub.account.platform];
+  const content = await contentOf(pub);
   if (!adapter.configured()) throw new PermanentError(`${adapter.label} n'est pas configuré sur ce serveur (${adapter.requiredEnv.join(", ")}).`);
 
   await db.publication.update({ where: { id: publicationId }, data: { status: "UPLOADING", error: null } });
   try {
     const token = await accessTokenFor(pub.account);
     const result = await adapter.publish(token, {
-      filePath: file,
-      fileSize: size,
+      ...content,
       title: pub.title,
-      description: pub.description,
-      hashtags: pub.clip.hashtags,
       privacy: pub.privacy,
-      durationSec: pub.clip.endSec - pub.clip.startSec,
       state: (pub.uploadState as Record<string, unknown> | null) ?? {},
       saveState: async (state) => {
         await db.publication.update({ where: { id: publicationId }, data: { uploadState: state as Prisma.InputJsonValue } });
