@@ -165,6 +165,16 @@ model Clip {
   /// Transcription mot à mot [{w, s, e}] relative au début de source.mp4
   transcript  Json?
   captions    Boolean      @default(true)
+  /// Options de montage propres au clip {coldOpen, trimSilence, punchZoom, progressBar, endCard, captionStyle} ;
+  /// une clé absente reprend le réglage par défaut de l'utilisateur
+  edit         Json         @default("{}")
+  /// Résumé du dernier montage {duration, teaserDur, removed, cuts, peakOut, bounds}
+  montage      Json?
+  /// Variantes proposées (IA ou par défaut) parmi lesquelles l'utilisateur choisit dans l'éditeur
+  hookOptions  String[]     @default([])
+  titleOptions String[]     @default([])
+  /// Mots à mettre en valeur dans les sous-titres (forme normalisée)
+  emphasis     String[]     @default([])
 
   /// Noms de fichiers relatifs au dossier du clip
   hasFinal    Boolean      @default(false)

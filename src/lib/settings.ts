@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+/** Styles de sous-titres (définis dans src/worker/render/captions.ts). */
+export const CAPTION_STYLE_KEYS = ["classic", "impact", "boxed", "karaoke", "minimal"] as const;
+
+/** Libellés affichés dans l'interface. */
+export const CAPTION_STYLE_LABELS: Record<(typeof CAPTION_STYLE_KEYS)[number], { name: string; hint: string }> = {
+  classic: { name: "Classique", hint: "2-3 mots en majuscules, le mot prononcé en couleur" },
+  impact: { name: "Impact", hint: "Un mot à la fois, très gros, les mots forts qui claquent" },
+  boxed: { name: "Encadré", hint: "Bandeau sombre derrière le texte, lisible sur tout fond" },
+  karaoke: { name: "Karaoké", hint: "La phrase entière, remplie en couleur au fil de la voix" },
+  minimal: { name: "Discret", hint: "Phrases entières, petites et sobres, seuls les mots forts colorés" },
+};
+
+
 /** Préférences de clipping d'un utilisateur. Toute valeur absente retombe sur le défaut. */
 export const settingsSchema = z.object({
   /** Langue des streams (transcription, titres générés) */
@@ -25,6 +38,22 @@ export const settingsSchema = z.object({
   showHook: z.boolean().default(true),
   showCredit: z.boolean().default(true),
 
+  /** Style des sous-titres (voir CAPTION_STYLES) */
+  captionStyle: z.enum(CAPTION_STYLE_KEYS).default("classic"),
+  /** Ouvre le clip sur un flash d'environ 1,5 s du moment fort, puis reprend au début */
+  coldOpen: z.boolean().default(true),
+  /** Coupe les silences et les creux avant le moment fort */
+  trimSilence: z.boolean().default(true),
+  /** Cale le début sur une phrase et la fin après la réaction (à la création du clip) */
+  smartBounds: z.boolean().default(true),
+  /** Léger zoom progressif sur le gameplay au moment fort */
+  punchZoom: z.boolean().default(true),
+  /** Fine barre de progression en haut de la vidéo */
+  progressBar: z.boolean().default(true),
+  /** Carton de fin (2,5 s) : appel à s'abonner + crédit du streamer */
+  endCard: z.boolean().default(false),
+  endCardText: z.string().trim().min(1).max(40).default("Abonne-toi pour la suite"),
+
   defaultHashtags: z.array(z.string().min(1).max(40)).max(15).default(["gta6", "gtavi", "gaming", "clips"]),
   /** Suppression automatique des clips non publiés après N jours (0 = jamais) */
   retentionDays: z.number().int().min(0).max(365).default(14),
@@ -45,4 +74,37 @@ export function parseSettings(raw: unknown): ClipSettings {
     if (field && field.safeParse(v).success) out[k] = v;
   }
   return settingsSchema.parse(out);
+}
+
+/** Options de montage réglables clip par clip. */
+export const clipEditSchema = z
+  .object({
+    captionStyle: z.enum(CAPTION_STYLE_KEYS),
+    coldOpen: z.boolean(),
+    trimSilence: z.boolean(),
+    punchZoom: z.boolean(),
+    progressBar: z.boolean(),
+    endCard: z.boolean(),
+  })
+  .partial();
+
+export type ClipEdit = Required<z.infer<typeof clipEditSchema>>;
+
+/** Options effectives d'un clip : ce qui est réglé sur le clip, sinon le défaut de l'utilisateur. */
+export function effectiveEdit(settings: ClipSettings, raw: unknown): ClipEdit {
+  const obj = (typeof raw === "object" && raw !== null && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  // Clé par clé : une valeur invalide ne fait pas perdre les autres.
+  const own: Partial<ClipEdit> = {};
+  for (const [k, field] of Object.entries(clipEditSchema.shape)) {
+    const r = (field as z.ZodType).safeParse(obj[k]);
+    if (r.success && r.data !== undefined) (own as Record<string, unknown>)[k] = r.data;
+  }
+  return {
+    captionStyle: own.captionStyle ?? settings.captionStyle,
+    coldOpen: own.coldOpen ?? settings.coldOpen,
+    trimSilence: own.trimSilence ?? settings.trimSilence,
+    punchZoom: own.punchZoom ?? settings.punchZoom,
+    progressBar: own.progressBar ?? settings.progressBar,
+    endCard: own.endCard ?? settings.endCard,
+  };
 }
