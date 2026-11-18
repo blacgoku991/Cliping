@@ -12,7 +12,7 @@ import { env } from "@/lib/env";
 import { log } from "../proc";
 import { buildAss, defaultEmphasis, layoutFor, OUT_H, type Word } from "../render/captions";
 import { buildPlan, mapWords, refineBounds, zoomWindows } from "../render/plan";
-import { blurBandHeight, makeThumbnail, renderVertical, validFacecam } from "../render/render";
+import { blurBandHeight, extractFrames, makeThumbnail, renderVertical, validFacecam } from "../render/render";
 import { transcribe, wordsToText } from "../transcribe";
 
 function asWords(json: Prisma.JsonValue | null): Word[] {
@@ -84,7 +84,12 @@ export async function processClip(clipId: string): Promise<void> {
     // 3. Titre, accroche, hashtags, note de potentiel.
     if (!clip.title) {
       const signals = (clip.signals ?? {}) as { audio?: number; chat?: number | null; scene?: number | null; detector?: number };
+      // Quatre images autour du pic (mise en place, pic, réaction) : l'IA décrit ce qui se passe vraiment à l'écran.
+      const peak = Math.min(Math.max(clip.peakSec, startSec), endSec);
+      const shots = [peak - 3, peak - 0.5, peak + 1, peak + 3].map((t) => Math.min(Math.max(t, startSec), endSec - 0.1));
+      const frames = env.ai.apiKey ? await extractFrames(source, shots).catch(() => []) : [];
       const ctx: MetadataContext = {
+        frames: frames.map((f) => ({ at: `${f.t - peak >= 0 ? "+" : "−"}${Math.abs(f.t - peak).toFixed(1)} s du pic`, jpeg: f.jpeg })),
         streamer: clip.streamer?.displayName ?? clip.recording?.author ?? "",
         platform: clip.streamer?.platform ?? "OTHER",
         game: clip.recording?.category ?? clip.streamer?.liveCategory ?? null,
@@ -110,7 +115,7 @@ export async function processClip(clipId: string): Promise<void> {
           hashtags: meta.hashtags,
           // Note finale : moitié signaux mesurés, moitié jugement de l'IA sur le contenu.
           score: meta.viralScore === null ? detectorScore : Math.round(0.55 * detectorScore + 0.45 * meta.viralScore),
-          signals: { ...signals, detector: detectorScore, ai: meta.viralScore, reason: meta.reason },
+          signals: { ...signals, detector: detectorScore, ai: meta.viralScore, reason: meta.reason, hookAngles: meta.hookAngles },
         },
       });
     }

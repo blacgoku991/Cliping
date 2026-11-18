@@ -12,6 +12,16 @@ export const CAPTION_STYLE_LABELS: Record<(typeof CAPTION_STYLE_KEYS)[number], {
   minimal: { name: "Discret", hint: "Phrases entières, petites et sobres, seuls les mots forts colorés" },
 };
 
+/** Angles des accroches proposées par l'IA. */
+export const HOOK_ANGLES = ["curiosite", "enjeu", "reaction", "citation", "question"] as const;
+export type HookAngle = (typeof HOOK_ANGLES)[number];
+export const HOOK_ANGLE_LABELS: Record<HookAngle, string> = {
+  curiosite: "Curiosité",
+  enjeu: "Enjeu",
+  reaction: "Réaction",
+  citation: "Citation",
+  question: "Question",
+};
 
 /** Préférences de clipping d'un utilisateur. Toute valeur absente retombe sur le défaut. */
 export const settingsSchema = z.object({
@@ -19,8 +29,9 @@ export const settingsSchema = z.object({
   language: z.string().min(2).max(5).default("fr"),
   /** 1 = seulement les moments énormes … 5 = beaucoup de clips */
   sensitivity: z.number().int().min(1).max(5).default(3),
-  clipMinSec: z.number().min(8).max(60).default(18),
-  clipMaxSec: z.number().min(15).max(180).default(50),
+  /** 15 à 45 s : assez pour la mise en place + le pic, et dans la plage où TikTok et Shorts gardent le mieux l'attention */
+  clipMinSec: z.number().min(8).max(60).default(15),
+  clipMaxSec: z.number().min(15).max(180).default(45),
   /** Contexte gardé avant le début de l'action / après sa fin */
   preRollSec: z.number().min(0).max(30).default(8),
   postRollSec: z.number().min(0).max(20).default(4),

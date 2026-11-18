@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { env } from "@/lib/env";
+import { HOOK_ANGLES, type HookAngle } from "@/lib/settings";
 import { log } from "./proc";
 import { normWord } from "./render/captions";
 
@@ -14,6 +15,8 @@ export interface ClipMetadata {
   titles: string[];
   /** Trois propositions d'accroche (la première = `hook`) */
   hooks: string[];
+  /** Angle de chaque accroche (même ordre que `hooks`) */
+  hookAngles: HookAngle[];
   /** Mots de la transcription à mettre en valeur dans les sous-titres (forme normalisée) */
   emphasis: string[];
   description: string;
@@ -33,15 +36,75 @@ export interface MetadataContext {
   transcript: string;
   signals: { audio: number; chat: number | null; scene: number | null };
   defaultHashtags: string[];
+  /** Images JPEG tirées de l'extrait autour du moment fort, dans l'ordre chronologique (peut être vide) */
+  frames?: Array<{ at: string; jpeg: Buffer }>;
+}
+
+export { HOOK_ANGLES, type HookAngle };
+
+/** Formules creuses qui iraient sur n'importe quel clip : jamais retenues comme accroche. */
+const GENERIC_HOOKS = [
+  "regardez ca", "regarde ca", "incroyable", "c'est incroyable", "c'est fou", "trop fou", "wow", "omg", "wtf", "attendez la fin",
+  "attends la fin", "regardez jusqu'a la fin", "vous allez pas croire", "vous n'allez pas croire", "moment epique", "moment fou",
+  "le moment", "ca part en vrille", "dingue", "watch this", "insane", "crazy", "wait for it", "you won't believe",
+].map((h) => h.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
+
+function hookKey(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9' ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Accroche recevable : 2 à 7 mots, pas une formule creuse, pas d'emoji ni de hashtag. */
+export function isGoodHook(text: string): boolean {
+  const key = hookKey(text);
+  const words = key.split(" ").filter(Boolean);
+  if (words.length < 2 || words.length > 7) return false;
+  if (/[#\p{Extended_Pictographic}]/u.test(text)) return false;
+  return !GENERIC_HOOKS.includes(key.replace(/ ?!+$/, ""));
+}
+
+/**
+ * Garde les 3 meilleures accroches : d'abord celles que le modèle a classées, puis les autres candidates,
+ * en écartant les formules creuses, les doublons et en préférant des angles différents.
+ */
+export function pickHooks(
+  best: Array<{ angle: string; text: string }>,
+  candidates: Array<{ angle: string; text: string }>,
+): Array<{ angle: HookAngle; text: string }> {
+  const out: Array<{ angle: HookAngle; text: string }> = [];
+  const seen = new Set<string>();
+  const pool = [...best, ...candidates]
+    .map((h) => ({ angle: (HOOK_ANGLES as readonly string[]).includes(h.angle) ? (h.angle as HookAngle) : "curiosite", text: h.text.replace(/#\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 70) }))
+    .filter((h) => h.text && isGoodHook(h.text));
+  // Premier passage : un angle par accroche ; second passage : on complète si besoin.
+  for (const pass of [0, 1]) {
+    for (const h of pool) {
+      if (out.length >= 3) break;
+      const k = hookKey(h.text);
+      if (seen.has(k)) continue;
+      if (pass === 0 && out.some((o) => o.angle === h.angle)) continue;
+      seen.add(k);
+      out.push(h);
+    }
+  }
+  return out;
 }
 
 const MetadataSchema = z.object({
   titles: z
     .array(z.string())
     .describe("Exactement 3 titres de publication, d'angles différents, 70 caractères max chacun, 1 emoji max, sans hashtag. Le meilleur en premier."),
+  hookCandidates: z
+    .array(z.object({ angle: z.enum(HOOK_ANGLES), text: z.string() }))
+    .describe("6 à 8 accroches candidates, au moins une par angle quand c'est possible honnêtement : curiosite, enjeu, reaction, citation (mots réellement prononcés), question"),
   hooks: z
-    .array(z.string())
-    .describe("Exactement 3 accroches incrustées en haut de la vidéo, d'angles différents : 3 à 7 mots, sans emoji ni hashtag. La meilleure en premier."),
+    .array(z.object({ angle: z.enum(HOOK_ANGLES), text: z.string() }))
+    .describe("Les 3 meilleures candidates selon les critères, d'angles différents, la meilleure en premier"),
   emphasis: z
     .array(z.string())
     .describe("2 à 8 mots (un mot chacun, tels qu'écrits dans la transcription) qui portent l'émotion ou l'info clé, à mettre en valeur dans les sous-titres. Vide si pas de transcription."),
@@ -53,13 +116,19 @@ const MetadataSchema = z.object({
 
 const SYSTEM = `Tu aides un clippeur à publier des extraits de streams de jeux vidéo au format court (TikTok, YouTube Shorts).
 
-Pour chaque extrait, on te donne le contexte du stream, la transcription de ce que dit le streamer et l'intensité des signaux qui ont déclenché la capture (volume sonore, activité du chat, action à l'écran). Tu ne vois pas l'image : appuie-toi sur la transcription, et reste général quand elle ne suffit pas à savoir ce qui se passe.
+Pour chaque extrait, on te donne le contexte du stream, la transcription de ce que dit le streamer, l'intensité des signaux qui ont déclenché la capture (volume sonore, activité du chat, action à l'écran) et, quand c'est possible, quelques images tirées de l'extrait autour du moment fort, dans l'ordre chronologique. Décris ce que montrent réellement les images et la transcription ; quand ni l'une ni l'autre ne permet de savoir ce qui se passe, reste général.
 
 Ce que tu produis sert tel quel :
 - Le titre et l'accroche doivent donner envie de regarder sans mentir sur le contenu. Pas de faux drame, pas de promesse que l'extrait ne tient pas : un titre trompeur fait fuir les spectateurs dans les deux premières secondes et pénalise le compte.
 - N'invente aucun fait (nom de mission, personnage, événement) absent de la transcription ou du contexte.
-- L'accroche est incrustée en gros sur la vidéo : courte, lisible d'un coup d'œil, dans le registre des clips gaming. Elle est lue pendant les deux premières secondes, avant que le spectateur décide de rester : elle doit poser une question ou une tension que l'extrait résout vraiment.
-- Tu proposes trois titres et trois accroches d'angles différents (par exemple : la réaction du streamer, la situation, la question que se pose le spectateur), pour que le clippeur choisisse. Les trois doivent rester vrais : si la transcription ne dit pas ce qui se passe, reste sur ce qu'on sait (le streamer, le jeu, sa réaction) plutôt que d'inventer un enjeu.
+- L'accroche est incrustée en gros sur la vidéo et lue pendant les deux premières secondes, avant que le spectateur décide de rester. Écris d'abord 6 à 8 candidates sous des angles vraiment différents :
+  - curiosite : un détail précis de la situation qui donne envie de voir la suite ;
+  - enjeu : ce qui est en jeu à ce moment (une course-poursuite, une mission, de l'argent) ;
+  - reaction : la réaction du streamer, telle qu'on la voit ou l'entend ;
+  - citation : une phrase courte réellement prononcée, entre guillemets si besoin ;
+  - question : la question que se pose le spectateur et à laquelle l'extrait répond.
+  Puis garde les 3 meilleures, d'angles différents, selon ces critères : lisible en une seconde, 7 mots au plus, précise à cet extrait, fidèle à ce que montrent les images et la transcription. Écarte toute formule creuse qui irait sur n'importe quel clip (« REGARDEZ ÇA », « INCROYABLE », « ATTENDEZ LA FIN ») : elles ne retiennent personne. Si l'extrait ne permet pas d'écrire un angle sans inventer, saute cet angle.
+- Les trois titres suivent la même règle : des angles différents, rien qui ne soit dans l'extrait.
 - Les mots mis en valeur dans les sous-titres sont des mots réellement prononcés dans la transcription : exclamations, chiffres, le mot qui fait la chute. Peu nombreux, sinon plus rien ne ressort.
 - Les hashtags mélangent le jeu, le streamer et le type de moment.
 - Le score de potentiel est honnête : un extrait où il ne se passe rien d'identifiable (transcription vide ou banale, signaux faibles) mérite une note basse. Mieux vaut écarter un clip moyen que le publier.
@@ -125,6 +194,7 @@ export function fallbackMetadata(ctx: MetadataContext, seed: string): ClipMetada
     hook: hooks[0] ?? "",
     titles,
     hooks,
+    hookAngles: [],
     emphasis: [],
     description: `Extrait du live${who ? ` de ${who}` : ""}${game ? ` sur ${game}` : ""}.`,
     hashtags: mergeHashtags(ctx.defaultHashtags, [who, game]),
@@ -146,7 +216,7 @@ export async function generateMetadata(ctx: MetadataContext): Promise<ClipMetada
   // Claude Haiku n'accepte pas le repli côté serveur ; les autres modèles récents, si.
   const supportsFallback = !/haiku/i.test(model);
 
-  const user = [
+  const text = [
     `Langue de rédaction : ${ctx.language}`,
     `Streamer : ${ctx.streamer ? `${ctx.streamer} (${ctx.platform})` : "inconnu"}`,
     `Jeu / catégorie : ${ctx.game || "inconnu"}`,
@@ -159,14 +229,24 @@ export async function generateMetadata(ctx: MetadataContext): Promise<ClipMetada
     "",
     "Transcription de l'extrait :",
     ctx.transcript.trim() ? `<transcription>\n${ctx.transcript.trim()}\n</transcription>` : "(aucune parole détectée ou transcription désactivée)",
+    "",
+    ctx.frames?.length
+      ? `Images de l'extrait ci-dessus (${ctx.frames.map((f) => f.at).join(", ")}).`
+      : "(pas d'image disponible pour cet extrait)",
   ].join("\n");
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  for (const f of ctx.frames ?? []) {
+    content.push({ type: "text", text: `Image ${f.at} :` });
+    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: f.jpeg.toString("base64") } });
+  }
+  content.push({ type: "text", text });
 
   try {
     const response = await client.beta.messages.parse({
       model,
       max_tokens: 16000,
       system: SYSTEM,
-      messages: [{ role: "user", content: user }],
+      messages: [{ role: "user", content }],
       output_config: { effort: "low", format: betaZodOutputFormat(MetadataSchema) },
       ...(supportsFallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
     });
@@ -180,7 +260,7 @@ export async function generateMetadata(ctx: MetadataContext): Promise<ClipMetada
       return null;
     }
     const titles = uniq(out.titles.map((t) => t.replace(/#\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 95))).slice(0, 3);
-    const hooks = uniq(out.hooks.map((t) => t.replace(/#\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 70))).slice(0, 3);
+    const picked = pickHooks(out.hooks, out.hookCandidates);
     if (!titles.length) {
       log("ai", "réponse sans titre, titre par défaut utilisé");
       return null;
@@ -190,9 +270,10 @@ export async function generateMetadata(ctx: MetadataContext): Promise<ClipMetada
     const emphasis = uniq(out.emphasis.map(normWord).filter((w) => w && spoken.has(w))).slice(0, 12);
     return {
       title: titles[0]!,
-      hook: hooks[0] ?? "",
+      hook: picked[0]?.text ?? "",
       titles,
-      hooks,
+      hooks: picked.map((h) => h.text),
+      hookAngles: picked.map((h) => h.angle),
       emphasis,
       description: out.description.trim().slice(0, 600),
       hashtags: mergeHashtags(out.hashtags, ctx.defaultHashtags),

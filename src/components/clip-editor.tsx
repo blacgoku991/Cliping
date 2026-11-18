@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { updateClip } from "@/app/actions/clips";
 import { clock } from "@/lib/format";
-import { CAPTION_STYLE_KEYS, CAPTION_STYLE_LABELS, type ClipEdit } from "@/lib/settings";
+import { CAPTION_STYLE_KEYS, CAPTION_STYLE_LABELS, HOOK_ANGLE_LABELS, type ClipEdit, type HookAngle } from "@/lib/settings";
 import { ActionForm, SubmitButton } from "./action-form";
 import { Field, Input, Select, Textarea, cx } from "./ui";
 
@@ -21,6 +21,8 @@ export interface EditableClip {
   peakSec: number;
   titleOptions: string[];
   hookOptions: string[];
+  /** Angle de chaque accroche proposée (même ordre), vide sans IA */
+  hookAngles: string[];
   /** Options de montage effectives (réglage du clip, sinon défaut de l'utilisateur) */
   edit: ClipEdit;
   /** Résumé du dernier montage */
@@ -36,12 +38,12 @@ const OPTIONS: Array<{ key: Exclude<keyof ClipEdit, "captionStyle">; label: stri
 ];
 
 /** Propositions cliquables (variantes de titre ou d'accroche). */
-function Choices({ options, current, onPick, label }: { options: string[]; current: string; onPick: (v: string) => void; label: string }) {
-  const list = options.filter((o) => o.trim());
+function Choices({ options, current, onPick, label, tags = [] }: { options: string[]; current: string; onPick: (v: string) => void; label: string; tags?: string[] }) {
+  const list = options.map((o, i) => ({ o, tag: tags[i] })).filter(({ o }) => o.trim());
   if (list.length < 2) return null;
   return (
     <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label={label}>
-      {list.map((o) => (
+      {list.map(({ o, tag }) => (
         <button
           key={o}
           type="button"
@@ -52,6 +54,7 @@ function Choices({ options, current, onPick, label }: { options: string[]; curre
             o === current ? "border-brand bg-brand/10 text-ink" : "border-line bg-bg text-muted hover:border-line-strong hover:text-ink",
           )}
         >
+          {tag ? <span className="mr-1.5 font-semibold text-faint">{tag}</span> : null}
           {o}
         </button>
       ))}
@@ -93,7 +96,7 @@ export function ClipEditor({ clip, hasFacecam, hasTranscript }: { clip: Editable
       <Field label="Accroche incrustée" hint="Le texte en gros en haut de la vidéo, lu dans les deux premières secondes. Laisse vide pour ne rien afficher.">
         <Input name="hook" value={hook} onChange={(e) => setHook(e.target.value)} maxLength={70} placeholder="IL S'ATTENDAIT PAS À ÇA" />
       </Field>
-      <Choices options={clip.hookOptions} current={hook} onPick={setHook} label="Accroches proposées" />
+      <Choices options={clip.hookOptions} current={hook} onPick={setHook} label="Accroches proposées" tags={clip.hookAngles.map((a) => HOOK_ANGLE_LABELS[a as HookAngle] ?? "")} />
       <Field label="Description">
         <Textarea name="description" defaultValue={clip.description} rows={2} maxLength={1500} />
       </Field>

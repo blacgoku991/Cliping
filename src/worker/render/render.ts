@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { env, FONTS_DIR } from "@/lib/env";
 import { runOk } from "../proc";
 import { OUT_H, OUT_W } from "./captions";
@@ -187,6 +190,35 @@ export function renderArgs(input: RenderInput): string[] {
 /** Monte le clip vertical 1080×1920 final. */
 export async function renderVertical(input: RenderInput): Promise<void> {
   await runOk(env.bin.ffmpeg, renderArgs(input), { cwd: input.cwd, timeoutMs: 30 * 60_000, signal: input.signal });
+}
+
+/**
+ * Images JPEG réduites (512 px de large) aux instants demandés, pour montrer l'extrait à l'IA.
+ * Ne lève jamais d'erreur : une image impossible à extraire est simplement absente.
+ */
+export async function extractFrames(video: string, times: number[], width = 512): Promise<Array<{ t: number; jpeg: Buffer }>> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "cliping-fr-"));
+  try {
+    const out: Array<{ t: number; jpeg: Buffer }> = [];
+    await Promise.all(
+      times.map(async (t, i) => {
+        const file = path.join(dir, `f${i}.jpg`);
+        try {
+          await runOk(
+            env.bin.ffmpeg,
+            ["-hide_banner", "-loglevel", "error", "-y", "-ss", Math.max(0, t).toFixed(3), "-i", video, "-frames:v", "1", "-vf", `scale=${width}:-2`, "-q:v", "5", file],
+            { timeoutMs: 30_000 },
+          );
+          out.push({ t, jpeg: await readFile(file) });
+        } catch {
+          // image manquante : tant pis
+        }
+      }),
+    );
+    return out.sort((a, b) => a.t - b.t);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 export async function makeThumbnail(video: string, out: string, atSec: number): Promise<void> {
