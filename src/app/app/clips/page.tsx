@@ -64,7 +64,7 @@ export default async function ClipsPage({ searchParams }: { searchParams: Promis
       <AutoRefresh seconds={10} />
       <PageHeader
         title="Clips"
-        subtitle="Les moments forts repérés par le bot, déjà montés. Survole un clip pour le voir bouger, ouvre-le pour le retoucher et le publier."
+        subtitle="Les moments forts repérés par le bot, déjà montés. Trie-les directement depuis la carte, ou ouvre un clip pour le retoucher et le publier."
         action={counts[0] ? <LinkButton href="/app/review" variant="primary"><Layers className="size-4" /> Mode validation · {counts[0]}</LinkButton> : undefined}
       />
 

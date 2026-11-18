@@ -224,7 +224,7 @@ export default async function Dashboard() {
       {recordings.length > 0 ? (
         <section className="mt-8" aria-labelledby="lives-title">
           <h2 id="lives-title" className="mb-3 flex items-center gap-2 text-lg font-semibold"><Activity className="size-5 text-brand" /> En direct</h2>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className={cx("grid gap-4", recordings.length > 1 && "lg:grid-cols-2")}>
             {recordings.map((r) => {
               const data = parseIntensity(r.intensity);
               const markers = r.clips.map((c) => ({ id: c.id, at: c.originSec + c.peakSec, score: c.score, title: c.title }));
@@ -244,7 +244,7 @@ export default async function Dashboard() {
                   <p className="truncate px-5 pt-1 text-sm text-muted">{[r.category, r.title].filter(Boolean).join(" · ") || " "}</p>
                   <div className="px-3 pb-3 pt-2">
                     {data ? (
-                      <IntensityChart data={data} markers={markers} />
+                      <IntensityChart data={data} markers={markers} height={recordings.length > 1 ? 120 : 160} />
                     ) : (
                       <div className="grid h-[120px] place-items-center rounded-xl border border-dashed border-line text-xs text-faint">La courbe d&apos;intensité arrive dans quelques secondes…</div>
                     )}

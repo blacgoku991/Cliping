@@ -6,9 +6,23 @@ import { getUser } from "@/lib/session";
 
 function PhoneMock() {
   return (
-    <div className="relative mx-auto w-[260px] sm:w-[290px]" aria-hidden>
-      <div className="absolute -inset-10 rounded-full bg-brand/25 blur-3xl" />
-      <div className="relative aspect-[9/19] overflow-hidden rounded-[2.4rem] border-[6px] border-[#25212f] bg-black shadow-2xl">
+    <div className="relative mx-auto w-[250px] sm:w-[290px]" aria-hidden>
+      <div className="phone-glow absolute -inset-12 rounded-full opacity-80 blur-3xl" />
+      {/* Pastilles flottantes : ce que le bot a vu */}
+      <div className="rise-in absolute -left-6 top-[38%] z-10 rounded-2xl border border-line-strong bg-surface/95 px-3 py-2 text-xs shadow-2xl backdrop-blur sm:-left-16" style={{ animationDelay: "300ms" }}>
+        <p className="font-semibold text-ink">Moment fort détecté</p>
+        <svg viewBox="0 0 120 30" className="mt-1 h-7 w-28">
+          <path d="M0 26 L12 25 L24 24 L36 25 L48 22 L58 20 L66 9 L72 3 L80 10 L90 21 L104 24 L120 25" fill="none" stroke="var(--color-brand)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" className="draw-line" style={{ "--len": 160 } as React.CSSProperties} />
+          <line x1="0" x2="120" y1="14" y2="14" stroke="var(--color-brand-2)" strokeOpacity="0.6" />
+          <circle cx="72" cy="3" r="3" fill="var(--color-brand-2)" />
+        </svg>
+      </div>
+      <div className="rise-in absolute -right-4 top-[58%] z-10 rounded-full border border-brand/40 bg-surface/95 px-3 py-1.5 text-xs font-bold text-brand shadow-2xl backdrop-blur sm:-right-10" style={{ animationDelay: "500ms" }}>
+        🔥 97 · prêt à poster
+      </div>
+      <div className="phone-shell relative rounded-[2.6rem] p-[9px]">
+      <div className="relative aspect-[9/19] overflow-hidden rounded-[2rem] bg-black">
+        <span className="absolute left-1/2 top-2 z-10 h-5 w-20 -translate-x-1/2 rounded-full bg-black" />
         <div className="absolute inset-0 bg-gradient-to-b from-[#3a1a5c] via-[#ff4d8d]/50 to-[#ff8a3d]/70" />
         <div className="absolute inset-x-0 top-[27%] h-[40%] bg-gradient-to-br from-[#16a6c9] via-[#f2a65a] to-[#f25c78]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgb(0_0_0/0.45),transparent_55%)]" />
@@ -16,7 +30,7 @@ function PhoneMock() {
             <span className="live-dot size-1.5 rounded-full bg-live" /> LIVE · 48 213
           </div>
         </div>
-        <p className="absolute inset-x-4 top-[11%] text-center font-display text-[26px] leading-[1.05] tracking-wide text-white [text-shadow:0_3px_0_#000,0_0_12px_rgb(0_0_0/0.6)]">
+        <p className="absolute inset-x-4 top-[11%] text-center font-display text-[23px] leading-[1.05] tracking-wide text-white [text-shadow:0_3px_0_#000,0_0_12px_rgb(0_0_0/0.6)]">
           IL S&apos;ATTENDAIT PAS À ÇA
         </p>
         <p className="absolute left-3 top-[23.5%] text-[9px] font-bold text-white/80">twitch.tv/tonstreamer</p>
@@ -28,6 +42,7 @@ function PhoneMock() {
           <MessageSquare className="size-6" />
           <Send className="size-6" />
         </div>
+      </div>
       </div>
     </div>
   );

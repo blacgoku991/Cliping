@@ -243,7 +243,7 @@ export function PhonePreview({
                 }}
               />
             ) : (
-              <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(80%_60%_at_50%_30%,rgb(255_77_141/0.18),transparent),#0b0a10] px-6 text-center text-sm text-muted">
+              <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-muted" style={{ background: "radial-gradient(80% 60% at 50% 35%, rgb(255 77 141 / 0.2), transparent 70%), radial-gradient(60% 40% at 60% 80%, rgb(139 92 246 / 0.16), transparent 70%), #0b0a10" }}>
                 {empty ?? (
                   <span className="flex flex-col items-center gap-3">
                     <Clapperboard className="size-8 text-faint" />

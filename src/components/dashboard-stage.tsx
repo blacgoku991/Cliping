@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Check, ChevronRight, Clapperboard, Layers, Loader2, Send, Sparkles, X } from "lucide-react";
+import { Check, ChevronRight, Clapperboard, Layers, Loader2, Radio, Send, Sparkles, X, Zap } from "lucide-react";
 import { reviewClip } from "@/app/actions/review";
 import { SourceIcon } from "./brand";
 import { PhonePreview, type PhoneClip } from "./phone-preview";
@@ -103,6 +103,22 @@ export function DashboardStage({ featured, queue, toReview }: { featured: StageC
             </div>
             {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
           </div>
+        ) : null}
+
+        {!featured && queue.length === 0 ? (
+          <ol className="grid gap-2.5 sm:grid-cols-3 md:grid-cols-1 xl:grid-cols-3" aria-label="Comment ça marche">
+            {[
+              { icon: <Radio className="size-4" />, title: "Le bot regarde", text: "Il surveille tes streamers et enregistre dès qu'un live passe sur le bon jeu." },
+              { icon: <Zap className="size-4" />, title: "Il repère les pics", text: "Cris, chat qui s'emballe, action à l'écran : les moments forts sont découpés et montés en 9:16." },
+              { icon: <Send className="size-4" />, title: "Tu valides, tu postes", text: "Tu vois le clip comme sur un téléphone, tu approuves et tu publies en un clic." },
+            ].map((s, i) => (
+              <li key={s.title} className="rise-in rounded-2xl border border-line bg-bg/60 p-4" style={{ animationDelay: `${i * 90}ms` }}>
+                <span className="brand-gradient grid size-8 place-items-center rounded-lg text-white">{s.icon}</span>
+                <p className="mt-3 text-sm font-semibold">{i + 1}. {s.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted">{s.text}</p>
+              </li>
+            ))}
+          </ol>
         ) : null}
 
         <div className="min-w-0">
