@@ -15,7 +15,8 @@ export interface VideoStats {
   shares: number | null;
 }
 
-export const BATCH_SIZE: Record<SocialPlatform, number> = { YOUTUBE: 50, TIKTOK: 20 };
+// Instagram : valeur de forme uniquement, ses publications ne sont pas relevées (voir trackability).
+export const BATCH_SIZE: Record<SocialPlatform, number> = { YOUTUBE: 50, TIKTOK: 20, INSTAGRAM: 1 };
 
 /** L'autorisation TikTok qui permet de lire les compteurs de ses propres vidéos. */
 export const TIKTOK_STATS_SCOPE = "video.list";
@@ -28,7 +29,7 @@ export function canReadStats(platform: SocialPlatform, scopes: string): boolean 
   return list.length === 0 || list.some((s) => s.includes("youtube.readonly") || s.endsWith("/auth/youtube") || s.includes("youtube.force-ssl"));
 }
 
-export type Trackability = "OK" | "DRAFT" | "NO_SCOPE" | "NO_ID";
+export type Trackability = "OK" | "DRAFT" | "NO_SCOPE" | "NO_ID" | "UNSUPPORTED";
 
 /**
  * Peut-on suivre cette publication ?
@@ -39,6 +40,8 @@ export function trackability(
   pub: { privacy: string; externalId: string | null },
   account: { platform: SocialPlatform; scopes: string },
 ): Trackability {
+  // Lire les statistiques d'un Reel demande un droit Instagram que l'app ne demande pas encore.
+  if (account.platform === "INSTAGRAM") return "UNSUPPORTED";
   if (account.platform === "TIKTOK") {
     if (pub.privacy === "draft") return "DRAFT";
     // Un identifiant de vidéo TikTok est numérique ; sinon on n'a que le publish_id de l'envoi.
@@ -127,5 +130,7 @@ export async function fetchTiktokStats(accessToken: string, videoIds: string[]):
 }
 
 export function fetchStats(platform: SocialPlatform, accessToken: string, ids: string[]): Promise<Map<string, VideoStats>> {
-  return platform === "YOUTUBE" ? fetchYoutubeStats(accessToken, ids) : fetchTiktokStats(accessToken, ids);
+  if (platform === "YOUTUBE") return fetchYoutubeStats(accessToken, ids);
+  if (platform === "TIKTOK") return fetchTiktokStats(accessToken, ids);
+  throw new PlatformRejectedError("Les statistiques Instagram ne sont pas encore relevées.");
 }

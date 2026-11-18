@@ -143,6 +143,13 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
           reliée à rien de ce que TikTok nous renvoie. Elles ne comptent pas dans les chiffres ci-dessous (plutôt que d&apos;afficher des zéros).
         </Notice>
       ) : null}
+      {untracked.unsupported > 0 ? (
+        <Notice>
+          <strong>{untracked.unsupported} publication{untracked.unsupported > 1 ? "s" : ""} Instagram</strong> ne {untracked.unsupported > 1 ? "sont" : "est"} pas
+          suivie{untracked.unsupported > 1 ? "s" : ""} : Cliping ne relève pas encore les statistiques des Reels. Regarde-les dans l&apos;app Instagram ; elles ne comptent
+          pas dans les chiffres ci-dessous.
+        </Notice>
+      ) : null}
       {report.accounts.some((a) => a.missingScope) ? (
         <Notice tone="warn">
           {report.accounts.filter((a) => a.missingScope).map((a) => a.displayName).join(", ")} : TikTok ne nous a pas autorisés à lire les vues de tes vidéos

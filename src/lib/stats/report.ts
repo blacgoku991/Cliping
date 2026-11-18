@@ -98,7 +98,7 @@ export interface PerformanceReport {
     hours: DimensionResult;
     hooks: DimensionResult;
   };
-  untracked: { draft: number; noScope: number; noId: number; notFound: number; pending: number };
+  untracked: { draft: number; noScope: number; noId: number; notFound: number; pending: number; unsupported: number };
 }
 
 const MILESTONES = [1, 6, 24];
@@ -175,12 +175,13 @@ export async function performanceReport(userId: string, opts: ReportOptions = {}
   const since = opts.sinceDays ? now - opts.sinceDays * DAY : -Infinity;
   const inPeriod = (p: LoadedPub) => p.publishedAt!.getTime() >= since;
   const pubs = allPubs.filter(inPeriod);
-  const untracked = { draft: 0, noScope: 0, noId: 0, notFound: 0, pending: 0 };
+  const untracked = { draft: 0, noScope: 0, noId: 0, notFound: 0, pending: 0, unsupported: 0 };
   const trackedAll: Array<LoadedPub & { snaps: Snapshot[]; v24: number | null }> = [];
   for (const p of allPubs) {
     const t = trackability(p, p.account);
     const count = inPeriod(p);
-    if (t === "DRAFT") untracked.draft += Number(count);
+    if (t === "UNSUPPORTED") untracked.unsupported += Number(count);
+    else if (t === "DRAFT") untracked.draft += Number(count);
     else if (t === "NO_SCOPE") untracked.noScope += Number(count);
     else if (t === "NO_ID") untracked.noId += Number(count);
     else if (p.statsStatus === "NOT_FOUND") untracked.notFound += Number(count);
