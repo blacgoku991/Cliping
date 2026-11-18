@@ -7,6 +7,7 @@ import { claimJob, completeJob, failJob, requeueStaleJobs, type JobPayloads, typ
 import { renewExpiringTokens } from "@/lib/platforms";
 import { ensureDir } from "@/lib/storage";
 import { cleanup } from "./cleanup";
+import { markCompilationFailed, renderCompilation } from "./compilation";
 import { DISCOVERY_INTERVAL_SEC, discoveryEnabled, refreshDiscovery } from "./discovery";
 import { Monitor, resetStaleState } from "./monitor";
 import { processClip, renderClip } from "./pipeline/clip";
@@ -32,6 +33,7 @@ const handlers: Handlers = {
   cleanup: () => cleanup(),
   "discovery.refresh": (p) => refreshDiscovery(p.userId),
   "stats.collect": () => collectStats(),
+  "compilation.render": (p) => renderCompilation(p.compilationId, p.thumbOnly === true),
 };
 
 async function onFailure(job: Job, error: unknown, willRetry: boolean): Promise<void> {
@@ -43,6 +45,8 @@ async function onFailure(job: Job, error: unknown, willRetry: boolean): Promise<
     await db.clip.updateMany({ where: { id: payload.clipId, status: "PROCESSING" }, data: { status: "FAILED", error: message.slice(0, 1000) } });
   } else if (job.type === "clip.render" && !willRetry) {
     await db.clip.updateMany({ where: { id: payload.clipId }, data: { error: `Montage échoué : ${message}`.slice(0, 1000) } });
+  } else if (job.type === "compilation.render" && !willRetry) {
+    await markCompilationFailed(payload.compilationId!, message);
   } else if (job.type === "vod.import" && !willRetry) {
     await markVodFailed(payload.recordingId!, message);
   }

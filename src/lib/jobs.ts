@@ -10,7 +10,8 @@ export type JobType =
   | "publish.check"
   | "cleanup"
   | "discovery.refresh"
-  | "stats.collect";
+  | "stats.collect"
+  | "compilation.render";
 
 export interface JobPayloads {
   "clip.process": { clipId: string };
@@ -21,6 +22,8 @@ export interface JobPayloads {
   cleanup: Record<string, never>;
   "discovery.refresh": { userId: string };
   "stats.collect": Record<string, never>;
+  /** thumbOnly : ne refait que la miniature (texte modifié) */
+  "compilation.render": { compilationId: string; thumbOnly?: boolean };
 }
 
 export async function enqueue<T extends JobType>(

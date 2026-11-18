@@ -23,6 +23,13 @@ export interface PublishInput {
   hashtags: string[];
   privacy: string;
   durationSec: number;
+  /**
+   * « short » (défaut) : clip vertical court ; « video » : vidéo horizontale classique (compilation).
+   * Seul YouTube accepte « video ».
+   */
+  format?: "short" | "video";
+  /** Miniature personnalisée (JPEG ≤ 2 Mo), envoyée après la vidéo quand la plateforme le permet */
+  thumbnailPath?: string | null;
   /** État sauvegardé d'une tentative précédente (reprise d'envoi) */
   state: Record<string, unknown>;
   /** Persiste l'état d'envoi pour qu'une nouvelle tentative reprenne au lieu de republier */

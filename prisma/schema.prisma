@@ -28,6 +28,7 @@ model User {
   accounts     SocialAccount[]
   publications Publication[]
   discovery    Discovery?
+  compilations Compilation[]
 }
 
 model Session {
@@ -195,10 +196,11 @@ model Clip {
   error      String?
   createdAt  DateTime  @default(now())
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recording    Recording?    @relation(fields: [recordingId], references: [id], onDelete: SetNull)
-  streamer     Streamer?     @relation(fields: [streamerId], references: [id], onDelete: SetNull)
-  publications Publication[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recording        Recording?        @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+  streamer         Streamer?         @relation(fields: [streamerId], references: [id], onDelete: SetNull)
+  publications     Publication[]
+  compilationItems CompilationItem[]
 
   @@index([userId, status, createdAt])
   @@index([userId, createdAt])
@@ -254,27 +256,30 @@ enum PublicationStatus {
   CANCELED
 }
 
+/// Une publication porte soit un clip (vertical), soit une compilation (vidéo YouTube classique) :
+/// exactement l'un des deux est renseigné (contrainte CHECK dans la migration).
 model Publication {
-  id          String            @id @default(cuid())
-  userId      String
-  clipId      String
-  accountId   String
-  status      PublicationStatus @default(QUEUED)
-  title       String
-  description String            @default("")
+  id            String            @id @default(cuid())
+  userId        String
+  clipId        String?
+  compilationId String?
+  accountId     String
+  status        PublicationStatus @default(QUEUED)
+  title         String
+  description   String            @default("")
   /// public | unlisted | private (YouTube) — public | followers | friends | private | draft (TikTok)
-  privacy     String            @default("public")
-  scheduledAt DateTime          @default(now())
-  publishedAt DateTime?
+  privacy       String            @default("public")
+  scheduledAt   DateTime          @default(now())
+  publishedAt   DateTime?
   /// ID de la vidéo côté plateforme (videoId YouTube, publish_id / post id TikTok)
-  externalId  String?
-  externalUrl String?
+  externalId    String?
+  externalUrl   String?
   /// Information non bloquante renvoyée par la plateforme (ex. « envoyé dans tes brouillons »)
-  note        String?
+  note          String?
   /// État d'envoi repris en cas de nouvelle tentative (URI de session d'upload…)
-  uploadState Json?
-  error       String?
-  createdAt   DateTime          @default(now())
+  uploadState   Json?
+  error         String?
+  createdAt     DateTime          @default(now())
 
   /// Suivi des performances (voir src/worker/stats.ts) : dernier relevé connu
   viewCount    Int?
@@ -290,22 +295,24 @@ model Publication {
   /// Prochain relevé prévu (plus fréquent dans les premières heures)
   statsNextAt  DateTime?
 
-  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clip    Clip              @relation(fields: [clipId], references: [id], onDelete: Cascade)
-  account SocialAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  stats   PublicationStat[]
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clip        Clip?             @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  compilation Compilation?      @relation(fields: [compilationId], references: [id], onDelete: Cascade)
+  account     SocialAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  stats       PublicationStat[]
 
   @@index([userId, createdAt])
   @@index([clipId])
+  @@index([compilationId])
   @@index([status, statsNextAt])
 }
 
 /// Historique des relevés de performances d'une publication (pour tracer les courbes)
 model PublicationStat {
-  id            String      @id @default(cuid())
+  id            String   @id @default(cuid())
   publicationId String
   userId        String
-  at            DateTime    @default(now())
+  at            DateTime @default(now())
   views         Int
   likes         Int?
   comments      Int?
@@ -317,26 +324,87 @@ model PublicationStat {
   @@index([userId, at])
 }
 
+// ───────────────────────── Compilations « best-of » (vidéo YouTube horizontale) ─────────────────────────
+
+enum CompilationStatus {
+  DRAFT
+  RENDERING
+  READY
+  FAILED
+}
+
+model Compilation {
+  id          String            @id @default(cuid())
+  userId      String
+  status      CompilationStatus @default(DRAFT)
+  title       String            @default("")
+  description String            @default("")
+  tags        String[]          @default([])
+  /// Texte court incrusté sur la miniature (2 à 4 mots)
+  thumbText   String            @default("")
+  /// Vrai = titre, description et texte de miniature encore à proposer (IA ou valeurs par défaut) au prochain montage
+  metaPending Boolean           @default(true)
+  /// Numérotation « compte à rebours » (#10 → #1, le meilleur à la fin) ; faux = 1, 2, 3…
+  countdown   Boolean           @default(true)
+  captions    Boolean           @default(true)
+  /// Ouverture : flash du meilleur moment + titre
+  intro       Boolean           @default(true)
+  /// D'où vient la proposition {kind: "recording"|"streamer"|"day"|"manual", id?, label}
+  origin      Json              @default("{}")
+  /// Résultat du dernier montage {duration, intro, outro, moments:[{clipId, at, duration, label}], renderMs}
+  montage     Json?
+  /// Chapitres du dernier montage [{at, title}] (vide si YouTube ne les afficherait pas)
+  chapters    Json?
+  hasFinal    Boolean           @default(false)
+  hasThumb    Boolean           @default(false)
+  progress    Float             @default(0)
+  renderedAt  DateTime?
+  error       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items        CompilationItem[]
+  publications Publication[]
+
+  @@index([userId, createdAt])
+}
+
+model CompilationItem {
+  id            String @id @default(cuid())
+  compilationId String
+  clipId        String
+  position      Int
+  /// Titre du moment (repère à l'écran et chapitre YouTube)
+  label         String @default("")
+
+  compilation Compilation @relation(fields: [compilationId], references: [id], onDelete: Cascade)
+  clip        Clip        @relation(fields: [clipId], references: [id], onDelete: Cascade)
+
+  @@unique([compilationId, clipId])
+  @@index([clipId])
+}
+
 // ───────────────────────── Découverte des lives d'un jeu ─────────────────────────
 
 /// « Qui stream ce jeu en ce moment ? » : réglages et dernier classement, rafraîchi par le worker.
 model Discovery {
-  id          String   @id @default(cuid())
-  userId      String   @unique
+  id         String    @id @default(cuid())
+  userId     String    @unique
   /// Nom du jeu tel qu'affiché sur Twitch (ex. « Grand Theft Auto VI »)
-  game        String   @default("Grand Theft Auto VI")
+  game       String    @default("Grand Theft Auto VI")
   /// Code langue ISO 639-1 (fr, en…) ; vide = toutes les langues
-  language    String   @default("fr")
+  language   String    @default("fr")
   /// Mode automatique : suivre les N plus gros lives, ajoutés et retirés au fil de l'eau
-  autoFollow  Boolean  @default(false)
-  autoCount   Int      @default(3)
+  autoFollow Boolean   @default(false)
+  autoCount  Int       @default(3)
   /// Chaînes que l'utilisateur a retirées à la main : le mode automatique ne les reprend plus
-  excluded    String[] @default([])
+  excluded   String[]  @default([])
   /// Dernier classement [{platform, login, displayName, title, viewers, thumbnailUrl, language, startedAt}]
-  results     Json     @default("[]")
-  fetchedAt   DateTime?
-  error       String?
-  updatedAt   DateTime @updatedAt
+  results    Json      @default("[]")
+  fetchedAt  DateTime?
+  error      String?
+  updatedAt  DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

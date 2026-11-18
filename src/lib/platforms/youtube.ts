@@ -1,4 +1,4 @@
-import { open } from "node:fs/promises";
+import { open, readFile } from "node:fs/promises";
 import { env } from "../env";
 import {
   hashtagLine,
@@ -17,6 +17,9 @@ const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API = "https://www.googleapis.com/youtube/v3";
 const UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
+const THUMB_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set";
+/** Limite de taille d'une miniature imposée par YouTube. */
+const THUMB_MAX_BYTES = 2 * 1024 * 1024;
 // youtube.upload pour publier, youtube.readonly pour lire le nom/l'avatar de la chaîne connectée.
 const SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"];
 const CHUNK = 8 * 1024 * 1024; // multiple de 256 Kio, exigé par le protocole d'envoi reprenable
@@ -70,18 +73,31 @@ async function apiError(res: Response, what: string): Promise<Error> {
   return new Error(`YouTube (${what}) : ${message}`);
 }
 
+/** YouTube limite l'ensemble des mots-clés à 500 caractères (ceux qui contiennent une espace comptent leurs guillemets). */
+export function tagsWithin(tags: string[], maxChars: number): string[] {
+  const out: string[] = [];
+  let used = 0;
+  for (const t of tags) {
+    const cost = t.length + (t.includes(" ") ? 2 : 0) + (out.length ? 1 : 0);
+    if (used + cost > maxChars) break;
+    out.push(t);
+    used += cost;
+  }
+  return out;
+}
+
 interface VideoResource {
   id?: string;
   status?: { privacyStatus?: string; uploadStatus?: string };
 }
 
-function resultFrom(video: VideoResource, wantedPrivacy: string): PublishResult {
+function resultFrom(video: VideoResource, wantedPrivacy: string, format: "short" | "video" = "short"): PublishResult {
   if (!video.id) throw new Error("YouTube n'a pas renvoyé d'identifiant de vidéo");
   const actual = video.status?.privacyStatus;
   return {
     status: "PUBLISHED",
     externalId: video.id,
-    url: `https://www.youtube.com/shorts/${video.id}`,
+    url: format === "video" ? `https://www.youtube.com/watch?v=${video.id}` : `https://www.youtube.com/shorts/${video.id}`,
     // Les projets API non audités par Google voient leurs envois forcés en privé.
     note:
       actual && actual !== wantedPrivacy
@@ -134,6 +150,44 @@ async function querySession(sessionUri: string, size: number): Promise<{ done: V
     return { next: range ? Number(range[1]) + 1 : 0 };
   }
   return null; // session expirée : on repart de zéro
+}
+
+/**
+ * Envoie la miniature personnalisée d'une vidéo (thumbnails.set). Ne lève jamais : une miniature refusée
+ * ne doit pas faire échouer une vidéo déjà en ligne. Renvoie une note à afficher, ou null si tout va bien.
+ */
+export async function setThumbnail(accessToken: string, videoId: string, filePath: string): Promise<string | null> {
+  try {
+    const data = await readFile(filePath);
+    if (data.length > THUMB_MAX_BYTES) return "Miniature non envoyée : elle dépasse 2 Mo.";
+    const res = await fetch(`${THUMB_URL}?videoId=${encodeURIComponent(videoId)}&uploadType=media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "image/jpeg", "Content-Length": String(data.length) },
+      body: data,
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as GoogleApiError;
+    const reason = body.error?.errors?.[0]?.reason ?? "";
+    if (res.status === 403) {
+      return "YouTube a refusé la miniature personnalisée : la chaîne doit être vérifiée (youtube.com/verify) pour en utiliser une. La vidéo est en ligne avec une miniature automatique ; tu peux mettre la nôtre depuis YouTube Studio.";
+    }
+    if (res.status === 429 || reason === "uploadRateLimitExceeded") {
+      return "YouTube limite pour l'instant l'envoi de miniatures sur cette chaîne : la vidéo est en ligne avec une miniature automatique.";
+    }
+    return `Miniature non envoyée (${body.error?.message ?? `HTTP ${res.status}`}). La vidéo est en ligne avec une miniature automatique.`;
+  } catch (err) {
+    return `Miniature non envoyée (${err instanceof Error ? err.message : String(err)}). La vidéo est en ligne avec une miniature automatique.`;
+  }
+}
+
+/** Vidéo classique terminée : on ajoute la miniature et on en reporte l'issue dans la note. */
+async function finishVideo(accessToken: string, result: PublishResult, input: PublishInput): Promise<PublishResult> {
+  if (input.format !== "video" || !input.thumbnailPath || input.state.thumbnailSet === true) return result;
+  const issue = await setThumbnail(accessToken, result.externalId, input.thumbnailPath);
+  if (!issue) await input.saveState({ ...input.state, thumbnailSet: true }).catch(() => {});
+  const note = [result.note, issue].filter(Boolean).join(" ");
+  return { ...result, note: note || undefined };
 }
 
 export const youtube: PlatformAdapter = {
@@ -189,19 +243,21 @@ export const youtube: PlatformAdapter = {
 
   async publish(accessToken, input: PublishInput): Promise<PublishResult> {
     // Reprise : si une tentative précédente a ouvert une session, on ne republie pas la vidéo.
+    const format = input.format ?? "short";
     const saved = typeof input.state.sessionUri === "string" ? input.state.sessionUri : null;
     if (saved) {
       const progress = await querySession(saved, input.fileSize).catch(() => null);
-      if (progress && "done" in progress) return resultFrom(progress.done, input.privacy);
-      if (progress) return resultFrom(await sendBytes(saved, input.filePath, input.fileSize, progress.next), input.privacy);
+      if (progress && "done" in progress) return finishVideo(accessToken, resultFrom(progress.done, input.privacy, format), input);
+      if (progress) return finishVideo(accessToken, resultFrom(await sendBytes(saved, input.filePath, input.fileSize, progress.next), input.privacy, format), input);
     }
 
-    const tags = hashtagLine(input.hashtags);
+    // Vidéo classique : la description arrive complète (chapitres, crédits, hashtags) ; les mots-clés vont dans « tags ».
+    const tags = format === "video" ? "" : hashtagLine(input.hashtags);
     const body = {
       snippet: {
         title: truncateBytes(input.title.replace(/[<>]/g, ""), 300).slice(0, 100),
         description: truncateBytes([input.description.replace(/[<>]/g, ""), tags].filter(Boolean).join("\n\n"), 4900),
-        tags: input.hashtags.slice(0, 15),
+        tags: tagsWithin(input.hashtags, format === "video" ? 450 : 1e9).slice(0, format === "video" ? 30 : 15),
         categoryId: "20", // Jeux vidéo
       },
       status: { privacyStatus: input.privacy, selfDeclaredMadeForKids: false },
@@ -221,6 +277,7 @@ export const youtube: PlatformAdapter = {
     const sessionUri = init.headers.get("location");
     if (!sessionUri) throw new Error("YouTube n'a pas ouvert de session d'envoi");
     await input.saveState({ sessionUri });
-    return resultFrom(await sendBytes(sessionUri, input.filePath, input.fileSize, 0), input.privacy);
+    input.state = { sessionUri };
+    return finishVideo(accessToken, resultFrom(await sendBytes(sessionUri, input.filePath, input.fileSize, 0), input.privacy, format), input);
   },
 };

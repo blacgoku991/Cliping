@@ -111,7 +111,7 @@ export default async function Dashboard() {
       },
       orderBy: { scheduledAt: "asc" },
       take: 400,
-      select: { id: true, accountId: true, clipId: true, title: true, status: true, scheduledAt: true, publishedAt: true, clip: { select: { hasFinal: true, renderedAt: true } } },
+      select: { id: true, accountId: true, clipId: true, compilationId: true, title: true, status: true, scheduledAt: true, publishedAt: true, clip: { select: { hasFinal: true, renderedAt: true } }, compilation: { select: { hasThumb: true, renderedAt: true } } },
     }),
   ]);
   const [streamerCount, accounts, worker, toReview, queued, recordings, queue, bestRecent, latest, made14, posted14, scores30, byStreamer, postedByStreamer, captured] = await Promise.all([
@@ -166,7 +166,7 @@ export default async function Dashboard() {
     ? await db.streamer.findMany({ where: { id: { in: streamerIds }, userId: user.id }, select: { id: true, displayName: true, platform: true } })
     : [];
   const postedCount = new Map<string, number>();
-  for (const p of postedByStreamer) if (p.clip.streamerId) postedCount.set(p.clip.streamerId, (postedCount.get(p.clip.streamerId) ?? 0) + 1);
+  for (const p of postedByStreamer) if (p.clip?.streamerId) postedCount.set(p.clip.streamerId, (postedCount.get(p.clip.streamerId) ?? 0) + 1);
   const top = byStreamer
     .map((s) => ({ ...names.find((n) => n.id === s.streamerId), id: s.streamerId!, clips: s._count._all, best: s._max.score ?? 0, posted: postedCount.get(s.streamerId!) ?? 0 }))
     .filter((s) => s.displayName)
@@ -283,11 +283,17 @@ export default async function Dashboard() {
               pubs={timelinePubs.map((p) => ({
                 id: p.id,
                 accountId: p.accountId,
-                clipId: p.clipId,
+                clipId: p.clipId ?? "",
+                // Publication d'une compilation : lien et miniature de la compilation.
+                href: p.compilationId ? `/app/compilations/${p.compilationId}` : undefined,
                 title: p.title,
                 status: p.status,
                 at: (p.status === "PUBLISHED" && p.publishedAt ? p.publishedAt : p.scheduledAt).getTime(),
-                thumb: p.clip.hasFinal ? `/api/media/${p.clipId}/thumb.jpg?v=${p.clip.renderedAt?.getTime() ?? 0}` : null,
+                thumb: p.clip?.hasFinal
+                  ? `/api/media/${p.clipId}/thumb.jpg?v=${p.clip.renderedAt?.getTime() ?? 0}`
+                  : p.compilation?.hasThumb
+                    ? `/api/compilations/${p.compilationId}/thumb.jpg?v=${p.compilation.renderedAt?.getTime() ?? 0}`
+                    : null,
               }))}
             />
           </Card>
