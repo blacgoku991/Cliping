@@ -1,6 +1,6 @@
 # Cliping
 
-Cliping regarde les lives à ta place, repère les meilleurs moments, les monte en clips verticaux sous-titrés, et te laisse les publier en un clic sur tes comptes TikTok et YouTube Shorts.
+Cliping regarde les lives à ta place, repère les meilleurs moments, les monte en clips verticaux sous-titrés, et te laisse les publier en un clic sur tes comptes TikTok, YouTube Shorts et Instagram Reels.
 
 ```
  chaînes suivies ──▶ live détecté ──▶ enregistrement ──▶ détection des moments forts
@@ -39,7 +39,7 @@ Une fois ton compte créé, mets `ALLOW_SIGNUP="false"` dans `.env` puis `docker
 
 ### Mise en ligne avec HTTPS
 
-TikTok et Google n'acceptent les connexions de comptes que vers une adresse `https://`. Pointe un nom de domaine vers ton serveur, puis :
+TikTok, Google et Instagram n'acceptent les connexions de comptes que vers une adresse `https://`. Instagram vient en plus chercher chaque vidéo sur ton serveur : sans adresse publique, pas de publication Instagram. Pointe un nom de domaine vers ton serveur, puis :
 
 ```bash
 # dans .env
@@ -53,7 +53,7 @@ Le certificat est obtenu et renouvelé automatiquement (Caddy + Let's Encrypt).
 
 ## Connecter tes comptes
 
-Les deux plateformes demandent de créer une « application développeur » (gratuit). Les adresses de redirection exactes à déclarer sont affichées dans la page **Comptes** de l'app.
+Chaque plateforme demande de créer une « application développeur » (gratuit). Les adresses de redirection exactes à déclarer sont affichées dans la page **Comptes** de l'app.
 
 ### YouTube
 
@@ -77,6 +77,28 @@ Les deux plateformes demandent de créer une « application développeur » (gra
 À savoir :
 - Le mode **Brouillon** (par défaut) envoie la vidéo dans les notifications de ton app TikTok : tu ajoutes un son si tu veux et tu postes. C'est le mode qui fonctionne sans audit, limité à 5 brouillons en attente par 24 h et par compte.
 - La **publication directe en public** exige que ton application ait passé l'audit TikTok. Avant ça, TikTok n'accepte que la visibilité « Moi uniquement », sur un compte privé.
+
+### Instagram Reels
+
+> **Non vérifié avec un vrai compte.** L'adaptateur suit la documentation de Meta (lue au travers d'extraits : le site développeur n'était pas joignable depuis l'environnement de développement) et son enchaînement est testé contre un faux Instagram. Fais un premier essai avec un compte secondaire.
+
+Il faut un compte Instagram **professionnel** (Business ou Créateur). Un compte personnel se convertit gratuitement dans l'app : Paramètres → Type de compte et outils → Passer à un compte professionnel. Aucune Page Facebook n'est nécessaire.
+
+1. Sur [developers.facebook.com](https://developers.facebook.com/apps), crée une application (les intitulés des menus de Meta changent souvent : cherche les termes entre guillemets). Choisis le cas d'usage qui permet de gérer le contenu Instagram (« Gérer les messages et le contenu sur Instagram ») ; type **Entreprise** si on te le demande.
+2. Dans le produit Instagram, ouvre **« API setup with Instagram login »** (configuration avec la connexion Instagram, pas celle avec Facebook).
+3. Section « Set up Instagram business login » : déclare l'URI de redirection `{APP_URL}/api/oauth/instagram/callback` (adresse exacte affichée dans la page Comptes).
+4. Permissions : `instagram_business_basic` et `instagram_business_content_publish`.
+5. Copie l'**Instagram app ID** et l'**Instagram app secret** (ceux de la section Instagram, pas l'identifiant de l'app Facebook) dans `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET`, puis `docker compose up -d`.
+6. Dans **Rôles de l'app** (testeurs Instagram), ajoute tes comptes, et accepte l'invitation depuis chaque compte (Instagram → Paramètres → Apps et sites web → Invitations de testeurs).
+
+À savoir :
+- **Validation par Meta.** Tant que ton app n'a pas passé l'« App Review » (accès avancé à `instagram_business_content_publish`), elle ne fonctionne qu'avec les comptes qui ont un rôle dans l'app (administrateur, développeur, testeur). Pour tes propres comptes, ça suffit. Pour publier sur les comptes d'autres personnes, il faut la validation, qui demande une vidéo de démonstration, une politique de confidentialité et la vérification de l'entreprise.
+- **Comment la vidéo part.** Avec la connexion Instagram, Meta n'accepte pas l'envoi direct du fichier (l'envoi « reprenable » n'est documenté que pour la connexion via Facebook) : Instagram vient télécharger la vidéo à une adresse que Cliping lui donne. Cette adresse est **temporaire (2 heures), signée, propre à une publication**, et ne sert que la vidéo montée de ce clip, uniquement pendant l'envoi. Ton serveur doit donc être en ligne en HTTPS (voir « Mise en ligne avec HTTPS ») ; la page Comptes te prévient sinon.
+- **Visibilité.** L'API ne propose pas de visibilité : un Reel est public si ton compte l'est. Tu choisis seulement s'il apparaît aussi dans le fil du profil (« Reels + fil ») ou seulement dans l'onglet Reels.
+- **Légende.** Titre, description, puis 5 hashtags au maximum (limite d'Instagram depuis fin 2025), 2 200 caractères en tout.
+- **Limites.** Instagram plafonne les publications par API sur 24 heures glissantes (100 d'après des guides qui citent la documentation de Meta) ; Cliping vérifie le quota avant d'envoyer.
+- **Accès.** Le jeton dure 60 jours. Cliping le renouvelle automatiquement bien avant l'échéance, même si le compte ne publie pas. Un compte resté sans renouvellement (serveur éteint pendant des semaines) devra être reconnecté.
+- **Plusieurs comptes.** Pour connecter un autre compte, déconnecte-toi d'abord d'Instagram dans le navigateur (ou utilise une fenêtre privée).
 
 ## Publier sur plusieurs comptes
 
@@ -128,6 +150,7 @@ Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e
 **Non vérifié en conditions réelles**, faute d'accès depuis l'environnement de développement :
 
 - la capture de vrais lives Twitch, Kick et YouTube (elle repose sur `streamlink`, l'outil de référence, mais n'a pas pu être essayée ici) ;
+- la connexion et la publication Instagram Reels : écrites d'après des extraits de la documentation de Meta (site développeur injoignable depuis l'environnement de développement) et des guides tiers pour les codes d'erreur, testées contre un faux Instagram (y compris le téléchargement réel de la vidéo par le lien signé), jamais avec un vrai compte ni une vraie application Meta ;
 - les envois vers YouTube et TikTok : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
 - l'appel à Claude et à l'API de transcription ;
 - la capture de TikTok Live (plugin `tiktok` de streamlink 8.6, fragile car TikTok change souvent son site) et le téléchargement de vrais clips Twitch/Kick/TikTok/Shorts par yt-dlp (extracteurs présents dans la version installée, mais sites injoignables ici). L'import d'un clip court a été vérifié de bout en bout avec des fichiers servis localement ;
@@ -140,7 +163,7 @@ Fais un essai complet avec un compte secondaire avant le jour J, et règle la se
 ## Bonnes pratiques
 
 - **Clippe des créateurs qui l'autorisent.** Beaucoup de streamers ont un programme de clipping ; sans leur accord, tes vidéos peuvent être retirées pour droits d'auteur. Le streamer est crédité sur chaque clip (désactivable, mais déconseillé).
-- **Évite de poster la même vidéo sur plusieurs comptes.** TikTok et YouTube pénalisent le contenu dupliqué ou « non original ». Répartis des clips différents entre tes comptes.
+- **Évite de poster la même vidéo sur plusieurs comptes.** TikTok, YouTube et Instagram pénalisent le contenu dupliqué ou « non original ». Répartis des clips différents entre tes comptes.
 - **Garde `streamlink` et `yt-dlp` à jour** : les plateformes changent souvent. `docker compose build --no-cache worker && docker compose up -d` les met à jour.
 
 ## Dimensionnement
@@ -182,7 +205,8 @@ TRANSCRIBE_API_URL=http://127.0.0.1:8765 TRANSCRIBE_API_KEY=test MONITOR_INTERVA
 prisma/schema.prisma        modèle de données
 src/app/                    site Next.js (pages, actions serveur, routes OAuth et média)
 src/lib/                    partagé site + bot : base, sessions, chiffrement, file de tâches, plateformes
-src/lib/platforms/          adaptateurs YouTube et TikTok (OAuth, envoi, suivi)
+src/lib/platforms/          adaptateurs YouTube, TikTok et Instagram (OAuth, envoi, suivi)
+src/lib/public-media.ts     liens publics signés et temporaires (vidéo récupérée par Instagram)
 src/lib/schedule.ts         planification en lot (partagée entre l'aperçu et la validation serveur)
 src/worker/                 le bot
   monitor.ts                  qui est en live ?
