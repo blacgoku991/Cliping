@@ -188,6 +188,10 @@ describe("TikTok", () => {
   it("sépare les scopes par des virgules dans l'URL d'autorisation", () => {
     const u = new URL(tiktok.authUrl("xyz"));
     expect(u.searchParams.get("scope")).toBe("user.info.basic,video.publish,video.upload");
+    // Le droit de lecture des vues n'est demandé que sur activation explicite.
+    process.env.TIKTOK_STATS_SCOPE = "true";
+    expect(new URL(tiktok.authUrl("xyz")).searchParams.get("scope")).toBe("user.info.basic,video.publish,video.upload,video.list");
+    delete process.env.TIKTOK_STATS_SCOPE;
     expect(u.searchParams.get("client_key")).toBe("tkey");
     expect(u.searchParams.get("redirect_uri")).toBe("https://clips.example.com/api/oauth/tiktok/callback");
   });

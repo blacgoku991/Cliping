@@ -49,6 +49,14 @@ export const env = {
     get clientSecret() {
       return str("TIKTOK_CLIENT_SECRET");
     },
+    /**
+     * Demande aussi l'autorisation « video.list », nécessaire pour relever les vues des vidéos TikTok.
+     * Désactivé par défaut : si ce droit n'est pas activé dans ton application TikTok, toute connexion
+     * de compte serait refusée. Active-le une fois le droit ajouté côté TikTok, puis reconnecte tes comptes.
+     */
+    get statsScope() {
+      return bool("TIKTOK_STATS_SCOPE", false);
+    },
   },
 
   ai: {

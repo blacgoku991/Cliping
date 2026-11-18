@@ -14,7 +14,9 @@ import {
 
 const AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/";
 const API = "https://open.tiktokapis.com/v2";
-const SCOPES = ["user.info.basic", "video.publish", "video.upload"];
+const BASE_SCOPES = ["user.info.basic", "video.publish", "video.upload"];
+/** « video.list » (lecture des vues, page Performances) n'est demandé que si TIKTOK_STATS_SCOPE est activé. */
+const scopes = () => (env.tiktok.statsScope ? [...BASE_SCOPES, "video.list"] : BASE_SCOPES);
 const MB = 1_000_000;
 const CHUNK = 10 * MB;
 const SINGLE_CHUNK_MAX = 64 * MB;
@@ -203,7 +205,7 @@ export const tiktok: PlatformAdapter = {
     const q = new URLSearchParams({
       client_key: env.tiktok.clientKey,
       response_type: "code",
-      scope: SCOPES.join(","),
+      scope: scopes().join(","),
       redirect_uri: redirectUri(env.appUrl, "TIKTOK"),
       state,
     });

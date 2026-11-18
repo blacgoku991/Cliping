@@ -70,7 +70,7 @@ Les deux plateformes demandent de créer une « application développeur » (gra
 ### TikTok
 
 1. Sur [developers.tiktok.com](https://developers.tiktok.com), crée une application et ajoute les produits **Login Kit** et **Content Posting API**.
-2. Scopes à demander : `user.info.basic`, `video.upload`, `video.publish`.
+2. Scopes à demander : `user.info.basic`, `video.upload`, `video.publish`. Pour que la page **Performances** relève aussi les vues de tes vidéos TikTok, ajoute le droit `video.list` à l'application, mets `TIKTOK_STATS_SCOPE="true"` dans `.env`, redémarre et reconnecte tes comptes. Tant que ce droit n'est pas activé côté TikTok, laisse la variable à `false` : sinon la connexion des comptes serait refusée.
 3. URI de redirection : `{APP_URL}/api/oauth/tiktok/callback`.
 4. Copie la clé et le secret dans `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET`.
 

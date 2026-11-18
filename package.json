@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate deploy",
     "db:dev": "prisma migrate dev",
     "postinstall": "prisma generate",
-    "demo:seed": "tsx --env-file-if-exists=.env tests/e2e/seed.ts"
+    "demo:seed": "tsx --env-file-if-exists=.env tests/e2e/seed.ts",
+    "demo:stats": "tsx --env-file-if-exists=.env tests/e2e/seed-stats.ts"
   },
   "engines": {
     "node": ">=20.9.0"

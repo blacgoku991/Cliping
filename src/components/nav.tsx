@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Clapperboard, Ellipsis, Layers, LayoutDashboard, Lightbulb, Radio, Send, Settings, Users } from "lucide-react";
+import { ChartColumn, Clapperboard, Ellipsis, Layers, LayoutDashboard, Lightbulb, Radio, Send, Settings, Users } from "lucide-react";
 import { cx } from "./ui";
 
 type Item = { href: string; label: string; short?: string; icon: typeof Send; exact?: boolean };
@@ -15,6 +15,7 @@ const ITEMS: Item[] = [
   { href: "/app/queue", label: "Publications", short: "Posts", icon: Send },
   { href: "/app/streamers", label: "Streamers", icon: Radio },
   { href: "/app/accounts", label: "Comptes", icon: Users },
+  { href: "/app/stats", label: "Performances", short: "Stats", icon: ChartColumn },
   { href: "/app/coach", label: "Conseils", icon: Lightbulb },
   { href: "/app/settings", label: "Réglages", icon: Settings },
 ];
