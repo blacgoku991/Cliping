@@ -15,6 +15,7 @@ import { db } from "@/lib/db";
 import { ago, clock } from "@/lib/format";
 import { PLATFORMS } from "@/lib/platforms";
 import { requireUser } from "@/lib/session";
+import { effectiveEdit, montageSummary, parseSettings } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Clip" };
 
@@ -180,6 +181,10 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
                     endSec: clip.endSec,
                     sourceDur: clip.sourceDur,
                     peakSec: clip.peakSec,
+                    titleOptions: clip.titleOptions,
+                    hookOptions: clip.hookOptions,
+                    edit: effectiveEdit(parseSettings(user.settings), clip.edit),
+                    montage: montageSummary(clip.montage),
                   }}
                   hasFacecam={!!clip.streamer?.facecam}
                   hasTranscript={Array.isArray(clip.transcript) && clip.transcript.length > 0}

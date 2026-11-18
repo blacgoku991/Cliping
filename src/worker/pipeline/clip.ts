@@ -2,13 +2,16 @@ import { rename, writeFile } from "node:fs/promises";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { PermanentError } from "@/lib/jobs";
-import { parseSettings } from "@/lib/settings";
+import { effectiveEdit, parseSettings } from "@/lib/settings";
 import { creditLabel } from "@/lib/sources";
 import { CLIP_FILES, clipDir, clipFile, fileSize } from "@/lib/storage";
 import { fallbackMetadata, generateMetadata, type MetadataContext } from "../ai";
+import { analyzeMedia } from "../analysis/features";
 import { probe } from "../analysis/probe";
+import { env } from "@/lib/env";
 import { log } from "../proc";
-import { buildAss, layoutFor, OUT_H, type Word } from "../render/captions";
+import { buildAss, defaultEmphasis, layoutFor, OUT_H, type Word } from "../render/captions";
+import { buildPlan, mapWords, refineBounds, zoomWindows } from "../render/plan";
 import { blurBandHeight, makeThumbnail, renderVertical, validFacecam } from "../render/render";
 import { transcribe, wordsToText } from "../transcribe";
 
@@ -22,6 +25,19 @@ function asWords(json: Prisma.JsonValue | null): Word[] {
     }
   }
   return out;
+}
+
+/** Durée du carton de fin. */
+const END_CARD_SEC = 2.5;
+
+/** Sonie de la source toutes les 100 ms (une passe audio seule, moins d'une seconde pour un clip). */
+async function sourceLoudness(source: string): Promise<Float32Array | null> {
+  try {
+    return (await analyzeMedia(source, { video: "off" })).loudness;
+  } catch (err) {
+    log("clip", `sonie illisible, montage sans coupe des temps morts : ${err instanceof Error ? err.message : err}`);
+    return null;
+  }
 }
 
 /**
@@ -49,7 +65,23 @@ export async function processClip(clipId: string): Promise<void> {
       }
     }
 
-    // 2. Titre, accroche, hashtags, note de potentiel.
+    // 2. Bornes intelligentes, une seule fois à la création (ensuite c'est l'utilisateur qui décide).
+    let loudness: Float32Array | null = null;
+    let { startSec, endSec } = clip;
+    if (settings.smartBounds && clip.renderedAt === null && clip.montage === null) {
+      loudness = await sourceLoudness(source);
+      const sourceDur = clip.sourceDur || (await probe(source)).duration;
+      const refined = refineBounds({ start: startSec, end: endSec, peak: clip.peakSec, sourceDur, words, loudness });
+      // Garde-fou : on ne dépasse pas la durée max réglée (marge de 4 s pour finir la réaction).
+      if (refined.end - refined.start <= settings.clipMaxSec + 4 && refined.reasons.length) {
+        log("clip", `${clipId} bornes ajustées (${refined.reasons.join(", ")}) : ${startSec.toFixed(1)}–${endSec.toFixed(1)} → ${refined.start.toFixed(1)}–${refined.end.toFixed(1)}`);
+        startSec = refined.start;
+        endSec = refined.end;
+        await db.clip.update({ where: { id: clipId }, data: { startSec, endSec } });
+      }
+    }
+
+    // 3. Titre, accroche, hashtags, note de potentiel.
     if (!clip.title) {
       const signals = (clip.signals ?? {}) as { audio?: number; chat?: number | null; scene?: number | null; detector?: number };
       const ctx: MetadataContext = {
@@ -58,8 +90,8 @@ export async function processClip(clipId: string): Promise<void> {
         game: clip.recording?.category ?? clip.streamer?.liveCategory ?? null,
         streamTitle: clip.recording?.title ?? null,
         language: settings.language,
-        durationSec: clip.endSec - clip.startSec,
-        transcript: wordsToText(words, clip.startSec, clip.endSec),
+        durationSec: endSec - startSec,
+        transcript: wordsToText(words, startSec, endSec),
         signals: { audio: signals.audio ?? 0, chat: signals.chat ?? null, scene: signals.scene ?? null },
         defaultHashtags: settings.defaultHashtags,
       };
@@ -71,6 +103,9 @@ export async function processClip(clipId: string): Promise<void> {
         data: {
           title: meta.title,
           hook: meta.hook,
+          titleOptions: meta.titles,
+          hookOptions: meta.hooks,
+          emphasis: meta.emphasis,
           description: meta.description,
           hashtags: meta.hashtags,
           // Note finale : moitié signaux mesurés, moitié jugement de l'IA sur le contenu.
@@ -80,8 +115,8 @@ export async function processClip(clipId: string): Promise<void> {
       });
     }
 
-    // 3. Montage.
-    await renderClip(clipId);
+    // 4. Montage.
+    await renderClip(clipId, loudness);
     await db.clip.updateMany({ where: { id: clipId, status: "PROCESSING" }, data: { status: "READY", error: null } });
     log("clip", `${clipId} prêt`);
   } catch (err) {
@@ -92,13 +127,15 @@ export async function processClip(clipId: string): Promise<void> {
 }
 
 /** (Re)monte final.mp4 à partir de source.mp4 et des réglages actuels du clip. */
-export async function renderClip(clipId: string): Promise<void> {
+export async function renderClip(clipId: string, knownLoudness: Float32Array | null = null): Promise<void> {
+  const t0 = Date.now();
   const clip = await db.clip.findUnique({
     where: { id: clipId },
     include: { streamer: true, recording: { select: { author: true } }, user: { select: { settings: true } } },
   });
   if (!clip) throw new PermanentError(`Clip ${clipId} introuvable (supprimé ?)`);
   const settings = parseSettings(clip.user.settings);
+  const edit = effectiveEdit(settings, clip.edit);
   const source = clipFile(clipId, "source");
   if ((await fileSize(source)) === null) throw new PermanentError("Le fichier source du clip a disparu");
 
@@ -106,34 +143,53 @@ export async function renderClip(clipId: string): Promise<void> {
   if (!info.hasVideo || info.width === 0) throw new PermanentError("Le fichier source ne contient pas de vidéo");
   const start = Math.max(0, Math.min(clip.startSec, info.duration - 1));
   const end = Math.min(info.duration, Math.max(clip.endSec, start + 1));
-  const duration = end - start;
 
   const facecam = validFacecam(clip.streamer?.facecam);
   const template = clip.template === "FACECAM" && !facecam ? "BLUR" : clip.template;
   const band = template === "BLUR" ? blurBandHeight(info.width, info.height, settings.zoom) : OUT_H;
 
-  const words = clip.captions ? asWords(clip.transcript).map((x) => ({ w: x.w, s: x.s - start, e: x.e - start })) : [];
-  const hook = settings.showHook ? clip.hook : "";
-  const credit = !settings.showCredit
-    ? ""
-    : clip.streamer
-      ? creditLabel(clip.streamer.platform, clip.streamer.login, clip.streamer.displayName)
-      : (clip.recording?.author ?? "");
+  // Plan de montage : cold open, coupes des temps morts (calées sur la parole même si les sous-titres sont masqués).
+  const transcript = asWords(clip.transcript);
+  const loudness = edit.trimSilence && info.hasAudio ? (knownLoudness ?? (await sourceLoudness(source))) : null;
+  const plan = buildPlan({
+    start,
+    end,
+    peak: Math.min(Math.max(clip.peakSec, start), end),
+    loudness,
+    words: transcript,
+    coldOpen: edit.coldOpen,
+    trimSilence: edit.trimSilence,
+    fps: env.worker.renderFps,
+  });
 
-  let assFile: string | null = null;
-  if (words.length || hook || credit) {
-    const ass = buildAss({
-      duration,
-      words,
-      hook,
-      credit,
-      font: settings.captionFont,
-      highlight: settings.captionColor,
-      layout: layoutFor(template, band),
-    });
-    await writeFile(clipFile(clipId, "captions"), ass, "utf8");
-    assFile = CLIP_FILES.captions;
-  }
+  const mapped = mapWords(plan.segments, clip.captions ? transcript : []);
+  const inWindow = transcript.filter((w) => w.e > start && w.s < end);
+  const emphasis = clip.emphasis.length ? clip.emphasis : defaultEmphasis(inWindow);
+  const hook = settings.showHook ? clip.hook : "";
+  const streamerCredit = clip.streamer
+    ? creditLabel(clip.streamer.platform, clip.streamer.login, clip.streamer.displayName)
+    : (clip.recording?.author ?? "");
+  const credit = settings.showCredit ? streamerCredit : "";
+  const endCardSec = edit.endCard ? END_CARD_SEC : 0;
+
+  const ass = buildAss({
+    duration: plan.duration,
+    words: mapped.words,
+    breaks: mapped.breaks,
+    hook,
+    credit,
+    font: settings.captionFont,
+    highlight: settings.captionColor,
+    layout: layoutFor(template, band),
+    style: edit.captionStyle,
+    emphasis,
+    progressBar: edit.progressBar,
+    flashAt: plan.teaserDur > 0 ? plan.teaserDur : null,
+    // Le crédit du streamer reste sur le carton même si l'incrustation en coin est désactivée.
+    endCard: endCardSec ? { title: settings.endCardText, credit: streamerCredit, duration: endCardSec } : null,
+  });
+  const hasText = /^Dialogue:/m.test(ass);
+  if (hasText) await writeFile(clipFile(clipId, "captions"), ass, "utf8");
 
   // On monte dans un fichier temporaire : l'ancien final.mp4 reste lisible pendant le rendu.
   const tmpOut = clipFile(clipId, "final") + ".tmp.mp4";
@@ -142,25 +198,43 @@ export async function renderClip(clipId: string): Promise<void> {
     out: tmpOut,
     cwd: clipDir(clipId),
     start,
-    duration,
+    duration: end - start,
+    segments: plan.segments,
     template,
     zoom: settings.zoom,
     facecam,
     srcWidth: info.width,
     srcHeight: info.height,
     hasAudio: info.hasAudio,
-    assFile,
+    assFile: hasText ? CLIP_FILES.captions : null,
+    punchZoom: edit.punchZoom ? zoomWindows(plan, Math.min(Math.max(clip.peakSec, start), end)) : [],
+    endCardSec,
   });
   await rename(tmpOut, clipFile(clipId, "final"));
 
-  // Miniature prise au moment fort (ou au milieu si le pic est hors de la fenêtre).
-  const peakRel = clip.peakSec >= start && clip.peakSec <= end ? clip.peakSec - start : duration / 2;
-  await makeThumbnail(clipFile(clipId, "final"), clipFile(clipId, "thumb"), Math.min(peakRel, duration - 0.2)).catch((e) =>
+  // Miniature prise au moment fort (dans le corps du clip, pas dans le cold open).
+  await makeThumbnail(clipFile(clipId, "final"), clipFile(clipId, "thumb"), Math.min(plan.peakOut + 0.3, plan.duration - 0.2)).catch((e) =>
     log("clip", `miniature impossible pour ${clipId} : ${e instanceof Error ? e.message : e}`),
   );
 
+  const montage = {
+    duration: plan.duration + endCardSec,
+    teaserDur: plan.teaserDur,
+    removed: plan.removed,
+    cuts: plan.cuts,
+    peakOut: plan.peakOut,
+    endCard: endCardSec,
+    style: edit.captionStyle,
+    renderMs: Date.now() - t0,
+  };
+  log(
+    "clip",
+    `${clipId} monté en ${(montage.renderMs / 1000).toFixed(1)} s — ${montage.duration.toFixed(1)} s` +
+      (plan.teaserDur ? `, cold open ${plan.teaserDur.toFixed(1)} s` : "") +
+      (plan.removed ? `, ${plan.removed.toFixed(1)} s de temps morts retirés (${plan.cuts} coupe(s))` : ""),
+  );
   await db.clip.update({
     where: { id: clipId },
-    data: { hasFinal: true, renderedAt: new Date(), sourceDur: info.duration, startSec: start, endSec: end, error: null },
+    data: { hasFinal: true, renderedAt: new Date(), sourceDur: info.duration, startSec: start, endSec: end, error: null, montage },
   });
 }

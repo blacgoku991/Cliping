@@ -150,33 +150,43 @@ model Clip {
   template    ClipTemplate @default(BLUR)
 
   /// Position, dans l'enregistrement d'origine, du début de source.mp4 (secondes)
-  originSec   Float        @default(0)
+  originSec Float @default(0)
   /// Moment fort et fenêtre du clip, en secondes à l'intérieur de source.mp4
-  peakSec     Float
-  startSec    Float
-  endSec      Float
+  peakSec   Float
+  startSec  Float
+  endSec    Float
   /// Durée totale de source.mp4 (marge incluse, pour pouvoir re-découper)
-  sourceDur   Float        @default(0)
+  sourceDur Float @default(0)
   /// Score de viralité 0..100
-  score       Int          @default(0)
+  score     Int   @default(0)
   /// Détail des signaux {audio, chat, scene, ai, reason}
-  signals     Json         @default("{}")
+  signals   Json  @default("{}")
 
-  title       String       @default("")
-  hook        String       @default("")
-  description String       @default("")
-  hashtags    String[]     @default([])
+  title        String   @default("")
+  hook         String   @default("")
+  description  String   @default("")
+  hashtags     String[] @default([])
   /// Transcription mot à mot [{w, s, e}] relative au début de source.mp4
-  transcript  Json?
-  captions    Boolean      @default(true)
+  transcript   Json?
+  captions     Boolean  @default(true)
   /// Kit de publication généré par le coach (légendes, commentaires à épingler…), voir src/lib/coach
-  publishKit  Json?
+  publishKit   Json?
+  /// Options de montage propres au clip {coldOpen, trimSilence, punchZoom, progressBar, endCard, captionStyle} ;
+  /// une clé absente reprend le réglage par défaut de l'utilisateur
+  edit         Json     @default("{}")
+  /// Résumé du dernier montage {duration, teaserDur, removed, cuts, peakOut, bounds}
+  montage      Json?
+  /// Variantes proposées (IA ou par défaut) parmi lesquelles l'utilisateur choisit dans l'éditeur
+  hookOptions  String[] @default([])
+  titleOptions String[] @default([])
+  /// Mots à mettre en valeur dans les sous-titres (forme normalisée)
+  emphasis     String[] @default([])
 
   /// Noms de fichiers relatifs au dossier du clip
-  hasFinal    Boolean      @default(false)
-  renderedAt  DateTime?
-  error       String?
-  createdAt   DateTime     @default(now())
+  hasFinal   Boolean   @default(false)
+  renderedAt DateTime?
+  error      String?
+  createdAt  DateTime  @default(now())
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   recording    Recording?    @relation(fields: [recordingId], references: [id], onDelete: SetNull)

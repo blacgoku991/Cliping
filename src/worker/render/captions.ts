@@ -1,3 +1,5 @@
+import { CAPTION_STYLE_KEYS } from "@/lib/settings";
+
 /** Mot transcrit : texte + début/fin en secondes. */
 export interface Word {
   w: string;
@@ -15,16 +17,75 @@ export interface CaptionLayout {
   credit: { x: number; y: number; an: number };
 }
 
-export interface AssInput {
+// ───────────────────────── Styles de sous-titres ─────────────────────────
+
+export const CAPTION_STYLES = CAPTION_STYLE_KEYS;
+export type CaptionStyle = (typeof CAPTION_STYLES)[number];
+
+interface StyleDef {
+  /** Police ; null = celle choisie dans les réglages (style Classique) */
+  font: string | null;
+  size: number;
+  upper: boolean;
+  /** « word » : un évènement par mot (mot prononcé mis en valeur) ; « line » : un évènement par paquet */
+  mode: "word" | "line";
+  maxWords: number;
+  maxChars: number;
+  borderStyle: 1 | 3;
+  outline: number;
+  shadow: number;
+  /** Couleur de contour / fond de boîte, format ASS &HAABBGGRR */
+  outlineColour: string;
+  /** Mot prononcé en couleur */
+  activeColor: boolean;
+  /** Agrandissement des mots forts (%) */
+  emphScale: number;
+  /** Petit effet d'apparition (échelle de départ en %, 100 = aucun) */
+  popFrom: number;
+}
+
+const STYLES: Record<CaptionStyle, StyleDef> = {
+  classic: { font: null, size: 80, upper: true, mode: "word", maxWords: 3, maxChars: 16, borderStyle: 1, outline: 7, shadow: 3, outlineColour: "&H00000000", activeColor: true, emphScale: 115, popFrom: 88 },
+  impact: { font: "Anton", size: 150, upper: true, mode: "word", maxWords: 2, maxChars: 9, borderStyle: 1, outline: 10, shadow: 4, outlineColour: "&H00000000", activeColor: false, emphScale: 125, popFrom: 70 },
+  boxed: { font: "Poppins ExtraBold", size: 64, upper: false, mode: "word", maxWords: 4, maxChars: 22, borderStyle: 3, outline: 16, shadow: 0, outlineColour: "&H30101010", activeColor: true, emphScale: 100, popFrom: 100 },
+  karaoke: { font: "Poppins ExtraBold", size: 70, upper: true, mode: "line", maxWords: 6, maxChars: 26, borderStyle: 1, outline: 6, shadow: 2, outlineColour: "&H00000000", activeColor: true, emphScale: 112, popFrom: 100 },
+  minimal: { font: "Poppins ExtraBold", size: 60, upper: false, mode: "line", maxWords: 7, maxChars: 30, borderStyle: 1, outline: 3, shadow: 2, outlineColour: "&H40000000", activeColor: false, emphScale: 100, popFrom: 100 },
+};
+
+export function isCaptionStyle(v: unknown): v is CaptionStyle {
+  return typeof v === "string" && (CAPTION_STYLES as readonly string[]).includes(v);
+}
+
+export interface EndCard {
+  /** Appel à l'action, ex. « Abonne-toi pour la suite » */
+  title: string;
+  /** Crédit du streamer, ex. « twitch.tv/inox » ; vide = rien */
+  credit: string;
+  /** Durée du carton (secondes) */
   duration: number;
-  /** Mots déjà recalés sur le début du clip (0 = première image du clip) */
+}
+
+export interface AssInput {
+  /** Durée du montage (sans le carton de fin) */
+  duration: number;
+  /** Mots déjà recalés sur la vidéo finale (0 = première image du clip) */
   words: Word[];
   hook?: string;
   credit?: string;
+  /** Police du style Classique */
   font: string;
-  /** Couleur du mot en cours, #RRGGBB */
+  /** Couleur de mise en valeur, #RRGGBB */
   highlight: string;
   layout: CaptionLayout;
+  style?: CaptionStyle;
+  /** Mots forts à mettre en valeur (comparés sans accents ni ponctuation) */
+  emphasis?: string[];
+  /** Instants où un nouveau sous-titre doit commencer (coupes du montage) */
+  breaks?: number[];
+  progressBar?: boolean;
+  /** Flash blanc à cet instant (retour au début après le cold open) */
+  flashAt?: number | null;
+  endCard?: EndCard | null;
 }
 
 export const OUT_W = 1080;
@@ -77,6 +138,36 @@ export function cleanBurnText(text: string): string {
     .trim();
 }
 
+/** Forme de comparaison d'un mot : minuscules, sans accents ni ponctuation. */
+export function normWord(w: string): string {
+  return w
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}']/gu, "")
+    .replace(/^'+|'+$/g, "");
+}
+
+/** Mots qui claquent dans un clip gaming, utilisés quand l'IA ne propose rien. */
+const STRONG_WORDS = new Set(
+  [
+    "non", "quoi", "jamais", "incroyable", "fou", "folle", "dingue", "ouf", "mort", "morts", "tue", "gg", "wtf", "omg", "wow",
+    "oh", "ah", "attends", "regarde", "frerot", "enorme", "impossible", "direct", "boom", "go", "vas", "cours", "vite", "pardon",
+    "no", "what", "insane", "crazy", "dead", "wait", "look", "never", "huge", "bro", "run", "nooo", "noooon", "jpp", "mdr", "ptdr",
+  ].map(normWord),
+);
+
+/** Mots forts par défaut : liste d'exclamations, nombres, mots criés (MAJUSCULES ou « ! »). */
+export function defaultEmphasis(words: Word[]): string[] {
+  const out = new Set<string>();
+  for (const { w } of words) {
+    const n = normWord(w);
+    if (!n) continue;
+    if (STRONG_WORDS.has(n) || /^\d+$/.test(n) || /!$/.test(w.trim()) || (w.replace(/[^\p{L}]/gu, "").length >= 3 && w === w.toUpperCase())) out.add(n);
+  }
+  return [...out].slice(0, 30);
+}
+
 /** Coupe un titre en lignes équilibrées (\N = retour à la ligne ASS). */
 export function wrapLines(text: string, maxChars: number, maxLines: number): string[] {
   const words = text.split(" ").filter(Boolean);
@@ -105,8 +196,11 @@ interface Chunk {
   end: number;
 }
 
-/** Regroupe les mots par paquets de 1 à 3 (lisible d'un coup d'œil sur mobile). */
-export function chunkWords(words: Word[], maxWords = 3, maxChars = 16): Chunk[] {
+/**
+ * Regroupe les mots par paquets (1 à 3 par défaut : lisible d'un coup d'œil sur mobile).
+ * `breaks` : instants qui forcent un nouveau paquet (coupes du montage).
+ */
+export function chunkWords(words: Word[], maxWords = 3, maxChars = 16, breaks: number[] = []): Chunk[] {
   const chunks: Chunk[] = [];
   let cur: Word[] = [];
   const flush = () => {
@@ -119,7 +213,8 @@ export function chunkWords(words: Word[], maxWords = 3, maxChars = 16): Chunk[] 
       const len = cur.reduce((n, x) => n + x.w.length + 1, 0) + word.w.length;
       const pause = word.s - prev.e > 0.6;
       const sentenceEnd = /[.!?…]$/.test(prev.w);
-      if (cur.length >= maxWords || len > maxChars || pause || sentenceEnd) flush();
+      const cut = breaks.some((b) => prev.s < b - 1e-6 && word.s >= b - 1e-6);
+      if (cur.length >= maxWords || len > maxChars || pause || sentenceEnd || cut) flush();
     }
     cur.push(word);
   }
@@ -135,24 +230,37 @@ export function chunkWords(words: Word[], maxWords = 3, maxChars = 16): Chunk[] 
   return chunks;
 }
 
+const RECT = (w: number, h: number) => `m 0 0 l ${w} 0 ${w} ${h} 0 ${h}`;
+
 export function buildAss(input: AssInput): string {
   const { layout } = input;
+  const styleName: CaptionStyle = input.style ?? "classic";
+  const st = STYLES[styleName];
   const hi = assColor(input.highlight);
-  const hookFont = "Anton";
+  const white = "&HFFFFFF&";
+  const capFont = st.font ?? input.font;
+  const capSize = st.font ? st.size : input.font === "Anton" ? 96 : 80;
+  const endAt = input.duration;
+  const total = input.duration + (input.endCard?.duration ?? 0);
+  // Karaoké : la couleur « principale » est celle des mots déjà prononcés, la « secondaire » celle des mots à venir.
+  const capPrimary = styleName === "karaoke" ? `&H00${hi.slice(2, 8)}` : "&H00FFFFFF";
   const lines: string[] = [
     "[Script Info]",
     "ScriptType: v4.00+",
     `PlayResX: ${OUT_W}`,
     `PlayResY: ${OUT_H}`,
-    "WrapStyle: 2",
+    "WrapStyle: 0",
     "ScaledBorderAndShadow: yes",
     "YCbCr Matrix: TV.709",
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Caption,${input.font},${input.font === "Anton" ? 96 : 80},&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,0,0,1,7,3,5,50,50,0,1`,
-    `Style: Hook,${hookFont},88,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,1,0,1,7,3,5,60,60,0,1`,
+    `Style: Caption,${capFont},${capSize},${capPrimary},&H00FFFFFF,${st.outlineColour},&H78000000,0,0,0,0,100,100,0,0,${st.borderStyle},${st.outline},${st.shadow},5,70,70,0,1`,
+    `Style: Hook,Anton,88,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,1,0,1,7,3,5,60,60,0,1`,
     `Style: Credit,Poppins ExtraBold,30,&H28FFFFFF,&H28FFFFFF,&H50000000,&H78000000,0,0,0,0,100,100,0,0,1,2,1,7,0,0,0,1`,
+    `Style: Shape,Poppins ExtraBold,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1`,
+    `Style: CardTitle,Anton,118,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,1,0,1,8,3,5,60,60,0,1`,
+    `Style: CardSub,Poppins ExtraBold,50,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,0,0,1,4,2,5,60,60,0,1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -162,34 +270,111 @@ export function buildAss(input: AssInput): string {
 
   const credit = input.credit ? cleanBurnText(input.credit) : "";
   if (credit) {
-    event(0, 0, input.duration, "Credit", `{\\an${layout.credit.an}\\pos(${layout.credit.x},${layout.credit.y})}${credit}`);
+    event(0, 0, endAt, "Credit", `{\\an${layout.credit.an}\\pos(${layout.credit.x},${layout.credit.y})}${credit}`);
   }
 
   const hook = input.hook ? cleanBurnText(input.hook).toUpperCase() : "";
   if (hook) {
     const wrapped = wrapLines(hook, 22, 3).join("\\N");
-    const end = layout.hookDuration ? Math.min(input.duration, layout.hookDuration) : input.duration;
+    const end = layout.hookDuration ? Math.min(endAt, layout.hookDuration) : endAt;
     event(1, 0, end, "Hook", `{\\an5\\pos(${OUT_W / 2},${layout.hookY})\\fad(120,${layout.hookDuration ? 200 : 0})}${wrapped}`);
   }
 
-  const words = input.words
-    .map((x) => ({ w: cleanBurnText(x.w).toUpperCase(), s: x.s, e: Math.max(x.e, x.s + 0.05) }))
-    .filter((x) => x.w && x.e > 0 && x.s < input.duration)
-    .map((x) => ({ ...x, s: Math.max(0, x.s), e: Math.min(input.duration, x.e) }));
+  // ── Sous-titres ──
+  const emph = new Set((input.emphasis ?? []).map(normWord).filter(Boolean));
+  // Ponctuation transcrite comme un mot à part (« incroyable » « ! ») : on la recolle au mot précédent.
+  const glued: Word[] = [];
+  for (const x of [...input.words].sort((a, b) => a.s - b.s)) {
+    const prev = glued[glued.length - 1];
+    if (prev && !/[\p{L}\p{N}]/u.test(x.w) && x.s - prev.e < 1) {
+      glued[glued.length - 1] = { ...prev, w: `${prev.w}${/^[!?:;»]/.test(x.w.trim()) ? " " : ""}${x.w.trim()}`, e: Math.max(prev.e, x.e) };
+    } else glued.push(x);
+  }
+  const words = glued
+    .map((x) => {
+      const clean = cleanBurnText(x.w);
+      return { w: st.upper ? clean.toUpperCase() : clean, s: x.s, e: Math.max(x.e, x.s + 0.05), strong: emph.has(normWord(x.w)) };
+    })
+    .filter((x) => x.w && x.e > 0 && x.s < endAt)
+    .map((x) => ({ ...x, s: Math.max(0, x.s), e: Math.min(endAt, x.e) }));
+  const strongAt = new Map(words.map((x) => [x as Word, x.strong]));
+  const isStrong = (w: Word) => strongAt.get(w) === true;
 
-  for (const chunk of chunkWords(words)) {
+  /** Balises d'un mot : couleur et taille fixées explicitement (pas de \r, qui casserait l'animation). */
+  const tagged = (text: string, color: string, scale: number, pop: boolean, extra = "") => {
+    const from = pop ? Math.round((scale * st.popFrom) / 100) : scale;
+    const anim = from !== scale ? `\\t(0,90,\\fscx${scale}\\fscy${scale})` : "";
+    return `{\\c${color}\\fscx${from}\\fscy${from}${anim}${extra}}${text}`;
+  };
+  const pos = `\\an5\\pos(${OUT_W / 2},${layout.captionY})`;
+
+  for (const chunk of chunkWords(words, st.maxWords, st.maxChars, input.breaks ?? [])) {
+    if (st.mode === "line") {
+      // Un seul évènement pour le paquet.
+      let text: string;
+      if (styleName === "karaoke") {
+        let t = chunk.start;
+        text = chunk.words
+          .map((x) => {
+            const gap = Math.max(0, Math.round((x.s - t) * 100));
+            const dur = Math.max(1, Math.round((x.e - Math.max(x.s, t)) * 100));
+            t = x.e;
+            const scale = isStrong(x) ? st.emphScale : 100;
+            return `${gap ? `{\\k${gap}}` : ""}{\\kf${dur}\\fscx${scale}\\fscy${scale}}${x.w}`;
+          })
+          .join(" ");
+      } else {
+        text = chunk.words.map((x) => (isStrong(x) ? `{\\c${hi}}${x.w}{\\c${white}}` : x.w)).join(" ");
+      }
+      const fade = styleName === "minimal" ? "\\fad(80,60)" : "";
+      event(2, chunk.start, chunk.end, "Caption", `{${pos}${fade}}${text}`);
+      continue;
+    }
     chunk.words.forEach((word, i) => {
       const from = i === 0 ? chunk.start : word.s;
       const next = chunk.words[i + 1];
       const to = next ? next.s : chunk.end;
       if (to - from < 0.02) return;
       const text = chunk.words
-        .map((x, j) => (j === i ? `{\\c${hi}}${x.w}{\\c&HFFFFFF&}` : x.w))
+        .map((x, j) => {
+          const active = j === i;
+          const strong = isStrong(x);
+          const color = (active && st.activeColor) || strong ? hi : white;
+          const scale = strong ? st.emphScale : 100;
+          // Apparition : tout le paquet au premier mot ; en Impact, chaque mot « tombe ».
+          const pop = styleName === "impact" ? active : i === 0;
+          const tilt = styleName === "impact" ? (strong && active ? "\\frz-3" : "\\frz0") : "";
+          return tagged(x.w, color, scale, pop, tilt);
+        })
         .join(" ");
-      // Petit effet « pop » à l'apparition du paquet.
-      const pop = i === 0 ? "\\fscx88\\fscy88\\t(0,90,\\fscx100\\fscy100)" : "";
-      event(2, from, to, "Caption", `{\\an5\\pos(${OUT_W / 2},${layout.captionY})${pop}}${text}`);
+      event(2, from, to, "Caption", `{${pos}}${text}`);
     });
+  }
+
+  // ── Barre de progression : fine, en haut, remplie en continu sur toute la durée ──
+  if (input.progressBar && endAt > 1) {
+    const ms = Math.round(endAt * 1000);
+    event(4, 0, endAt, "Shape", `{\\an7\\pos(0,0)\\bord0\\shad0\\c&H000000&\\1a&H90&\\p1}${RECT(OUT_W, 12)}`);
+    event(5, 0, endAt, "Shape", `{\\an7\\pos(0,0)\\bord0\\shad0\\c${hi}\\1a&H10&\\fscx0\\t(0,${ms},\\fscx100)\\p1}${RECT(OUT_W, 12)}`);
+  }
+
+  // ── Flash blanc au retour au début (après le cold open) ──
+  if (input.flashAt && input.flashAt > 0 && input.flashAt < endAt) {
+    event(6, input.flashAt, Math.min(endAt, input.flashAt + 0.3), "Shape", `{\\an7\\pos(0,0)\\bord0\\shad0\\c&HFFFFFF&\\1a&H30&\\t(0,280,\\1a&HFF&)\\p1}${RECT(OUT_W, OUT_H)}`);
+  }
+
+  // ── Carton de fin : image figée assombrie + appel à l'action + crédit ──
+  if (input.endCard && input.endCard.duration > 0) {
+    const c = input.endCard;
+    event(7, endAt, total, "Shape", `{\\an7\\pos(0,0)\\bord0\\shad0\\c&H000000&\\1a&HFF&\\t(0,250,\\1a&H50&)\\p1}${RECT(OUT_W, OUT_H)}`);
+    const title = wrapLines(cleanBurnText(c.title).toUpperCase(), 14, 3).join("\\N");
+    if (title) {
+      event(8, endAt + 0.1, total, "CardTitle", `{\\an5\\pos(${OUT_W / 2},${OUT_H / 2 - 90})\\fscx80\\fscy80\\t(0,140,\\fscx100\\fscy100)\\fad(120,0)}${title}`);
+    }
+    const cred = cleanBurnText(c.credit);
+    if (cred) {
+      event(8, endAt + 0.25, total, "CardSub", `{\\an5\\pos(${OUT_W / 2},${OUT_H / 2 + 130})\\fad(150,0)}Clip : {\\c${hi}}${cred}`);
+    }
   }
   return lines.join("\n") + "\n";
 }

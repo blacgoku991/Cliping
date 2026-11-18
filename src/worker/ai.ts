@@ -3,10 +3,19 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { log } from "./proc";
+import { normWord } from "./render/captions";
+
+const uniq = (xs: string[]) => xs.filter((x, i) => x && xs.indexOf(x) === i);
 
 export interface ClipMetadata {
   title: string;
   hook: string;
+  /** Trois propositions de titre (la première = `title`) */
+  titles: string[];
+  /** Trois propositions d'accroche (la première = `hook`) */
+  hooks: string[];
+  /** Mots de la transcription à mettre en valeur dans les sous-titres (forme normalisée) */
+  emphasis: string[];
   description: string;
   hashtags: string[];
   /** 0..100, null quand l'IA n'a pas été consultée */
@@ -27,8 +36,15 @@ export interface MetadataContext {
 }
 
 const MetadataSchema = z.object({
-  title: z.string().describe("Titre de la publication, 70 caractères max, 1 emoji max, sans hashtag"),
-  hook: z.string().describe("Accroche incrustée en haut de la vidéo : 3 à 7 mots, sans emoji ni hashtag"),
+  titles: z
+    .array(z.string())
+    .describe("Exactement 3 titres de publication, d'angles différents, 70 caractères max chacun, 1 emoji max, sans hashtag. Le meilleur en premier."),
+  hooks: z
+    .array(z.string())
+    .describe("Exactement 3 accroches incrustées en haut de la vidéo, d'angles différents : 3 à 7 mots, sans emoji ni hashtag. La meilleure en premier."),
+  emphasis: z
+    .array(z.string())
+    .describe("2 à 8 mots (un mot chacun, tels qu'écrits dans la transcription) qui portent l'émotion ou l'info clé, à mettre en valeur dans les sous-titres. Vide si pas de transcription."),
   description: z.string().describe("Une ou deux phrases de description, sans hashtag"),
   hashtags: z.array(z.string()).describe("4 à 8 hashtags sans le #, en minuscules"),
   viralScore: z.number().describe("Potentiel du clip en format court, de 0 à 100"),
@@ -42,7 +58,9 @@ Pour chaque extrait, on te donne le contexte du stream, la transcription de ce q
 Ce que tu produis sert tel quel :
 - Le titre et l'accroche doivent donner envie de regarder sans mentir sur le contenu. Pas de faux drame, pas de promesse que l'extrait ne tient pas : un titre trompeur fait fuir les spectateurs dans les deux premières secondes et pénalise le compte.
 - N'invente aucun fait (nom de mission, personnage, événement) absent de la transcription ou du contexte.
-- L'accroche est incrustée en gros sur la vidéo : courte, lisible d'un coup d'œil, dans le registre des clips gaming.
+- L'accroche est incrustée en gros sur la vidéo : courte, lisible d'un coup d'œil, dans le registre des clips gaming. Elle est lue pendant les deux premières secondes, avant que le spectateur décide de rester : elle doit poser une question ou une tension que l'extrait résout vraiment.
+- Tu proposes trois titres et trois accroches d'angles différents (par exemple : la réaction du streamer, la situation, la question que se pose le spectateur), pour que le clippeur choisisse. Les trois doivent rester vrais : si la transcription ne dit pas ce qui se passe, reste sur ce qu'on sait (le streamer, le jeu, sa réaction) plutôt que d'inventer un enjeu.
+- Les mots mis en valeur dans les sous-titres sont des mots réellement prononcés dans la transcription : exclamations, chiffres, le mot qui fait la chute. Peu nombreux, sinon plus rien ne ressort.
 - Les hashtags mélangent le jeu, le streamer et le type de moment.
 - Le score de potentiel est honnête : un extrait où il ne se passe rien d'identifiable (transcription vide ou banale, signaux faibles) mérite une note basse. Mieux vaut écarter un clip moyen que le publier.
 
@@ -90,9 +108,24 @@ export function fallbackMetadata(ctx: MetadataContext, seed: string): ClipMetada
   else variants = ["Le moment à ne pas rater 🔥", "Moment fort du live 😱", "Extrait du live 👀"];
   let h = 0;
   for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const k = h % variants.length;
+  const titles = [...variants.slice(k), ...variants.slice(0, k)];
+  // Accroches neutres : on ne sait pas ce qui se passe, on n'invente rien.
+  const hooks = (
+    who && game
+      ? [`${who} sur ${game}`, `Le moment de ${who}`, `${game} en live`]
+      : who
+        ? [`Le moment de ${who}`, `${who} en live`, `${who} en direct`]
+        : game
+          ? [`Moment fort sur ${game}`, `${game} en live`, `Ça se passe sur ${game}`]
+          : ["", "Moment fort du live", "Extrait du live"]
+  ).filter((x, i, a) => a.indexOf(x) === i);
   return {
-    title: variants[h % variants.length]!,
-    hook: who && game ? `${who} sur ${game}` : who || game,
+    title: titles[0]!,
+    hook: hooks[0] ?? "",
+    titles,
+    hooks,
+    emphasis: [],
     description: `Extrait du live${who ? ` de ${who}` : ""}${game ? ` sur ${game}` : ""}.`,
     hashtags: mergeHashtags(ctx.defaultHashtags, [who, game]),
     viralScore: null,
@@ -146,9 +179,21 @@ export async function generateMetadata(ctx: MetadataContext): Promise<ClipMetada
       log("ai", `réponse inexploitable (stop_reason=${response.stop_reason}), titre par défaut utilisé`);
       return null;
     }
+    const titles = uniq(out.titles.map((t) => t.replace(/#\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 95))).slice(0, 3);
+    const hooks = uniq(out.hooks.map((t) => t.replace(/#\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 70))).slice(0, 3);
+    if (!titles.length) {
+      log("ai", "réponse sans titre, titre par défaut utilisé");
+      return null;
+    }
+    // Seuls des mots vraiment prononcés : l'IA ne peut pas faire apparaître autre chose à l'écran.
+    const spoken = new Set(ctx.transcript.split(/\s+/).map(normWord).filter(Boolean));
+    const emphasis = uniq(out.emphasis.map(normWord).filter((w) => w && spoken.has(w))).slice(0, 12);
     return {
-      title: out.title.replace(/#\S+/g, "").replace(/\s+/g, " ").trim().slice(0, 95),
-      hook: out.hook.replace(/#\S+/g, "").trim().slice(0, 70),
+      title: titles[0]!,
+      hook: hooks[0] ?? "",
+      titles,
+      hooks,
+      emphasis,
       description: out.description.trim().slice(0, 600),
       hashtags: mergeHashtags(out.hashtags, ctx.defaultHashtags),
       viralScore: Math.round(Math.min(100, Math.max(0, out.viralScore))),
