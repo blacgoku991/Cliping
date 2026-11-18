@@ -25,6 +25,7 @@ model User {
   clips        Clip[]
   accounts     SocialAccount[]
   publications Publication[]
+  discovery    Discovery?
 }
 
 model Session {
@@ -45,6 +46,7 @@ enum SourcePlatform {
   TWITCH
   KICK
   YOUTUBE
+  TIKTOK
   OTHER
 }
 
@@ -69,6 +71,11 @@ model Streamer {
   lastCheckedAt DateTime?
   lastLiveAt    DateTime?
   lastError     String?
+  /// Vrai = ajoutée par le mode automatique de la découverte (retirée par lui quand elle sort du classement).
+  /// Les chaînes ajoutées à la main restent à false et ne sont jamais touchées par ce mode.
+  autoFollowed  Boolean   @default(false)
+  /// Spectateurs lors du dernier passage de la découverte (chaînes suivies automatiquement)
+  autoViewers   Int?
   createdAt     DateTime  @default(now())
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -204,6 +211,12 @@ model SocialAccount {
   scopes          String         @default("")
   /// Faux = le jeton a été révoqué ou n'a pas pu être rafraîchi : reconnexion requise
   valid           Boolean        @default(true)
+  /// Visibilité appliquée par défaut aux publications de ce compte (null = celle de la plateforme)
+  defaultPrivacy  String?
+  /// Nombre max de publications sur 24 heures glissantes (null = pas de plafond)
+  dailyCap        Int?
+  /// Dernier « tester la connexion » réussi
+  checkedAt       DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -250,6 +263,30 @@ model Publication {
 
   @@index([userId, createdAt])
   @@index([clipId])
+}
+
+// ───────────────────────── Découverte des lives d'un jeu ─────────────────────────
+
+/// « Qui stream ce jeu en ce moment ? » : réglages et dernier classement, rafraîchi par le worker.
+model Discovery {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  /// Nom du jeu tel qu'affiché sur Twitch (ex. « Grand Theft Auto VI »)
+  game        String   @default("Grand Theft Auto VI")
+  /// Code langue ISO 639-1 (fr, en…) ; vide = toutes les langues
+  language    String   @default("fr")
+  /// Mode automatique : suivre les N plus gros lives, ajoutés et retirés au fil de l'eau
+  autoFollow  Boolean  @default(false)
+  autoCount   Int      @default(3)
+  /// Chaînes que l'utilisateur a retirées à la main : le mode automatique ne les reprend plus
+  excluded    String[] @default([])
+  /// Dernier classement [{platform, login, displayName, title, viewers, thumbnailUrl, language, startedAt}]
+  results     Json     @default("[]")
+  fetchedAt   DateTime?
+  error       String?
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ───────────────────────── File de tâches (Postgres, SKIP LOCKED) ─────────────────────────

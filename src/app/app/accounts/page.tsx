@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Plus, Trash2 } from "lucide-react";
-import { disconnectAccount } from "@/app/actions/settings";
+import { Plug, Plus, Settings2, Trash2 } from "lucide-react";
+import { disconnectAccount, testAccount, updateAccountSettings } from "@/app/actions/settings";
+import { ActionForm, SubmitButton } from "@/components/action-form";
 import { SocialIcon } from "@/components/brand";
 import { ConfirmButton } from "@/components/client";
-import { Badge, Card, CardHeader, Notice, PageHeader, buttonClass } from "@/components/ui";
+import { Badge, Card, CardHeader, Field, Input, Notice, PageHeader, Select, buttonClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { ago } from "@/lib/format";
@@ -35,7 +36,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="Comptes" subtitle="Connecte autant de comptes TikTok et de chaînes YouTube que tu veux. Tu choisis ensuite, clip par clip, où publier." />
+      <PageHeader title="Comptes" subtitle="Connecte autant de comptes TikTok et de chaînes YouTube que tu veux. Tu choisis ensuite où publier, clip par clip ou en lot depuis « Publications »." />
       {sp.connected ? <Notice tone="ok" className="mb-5">Compte connecté : {sp.connected}</Notice> : null}
       {sp.error ? <Notice tone="bad" className="mb-5">{sp.error}</Notice> : null}
       {env.encryptionKey.length < 32 ? (
@@ -76,7 +77,8 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
               {mine.length > 0 ? (
                 <ul className="divide-y divide-line">
                   {mine.map((a) => (
-                    <li key={a.id} className="flex items-center gap-3 px-5 py-3.5">
+                    <li key={a.id}>
+                    <div className="flex items-center gap-3 px-5 py-3.5">
                       {a.avatarUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={a.avatarUrl} alt="" referrerPolicy="no-referrer" className="size-9 shrink-0 rounded-full bg-surface-2 object-cover" />
@@ -98,6 +100,37 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
                           <Trash2 className="size-3.5" />
                         </ConfirmButton>
                       </form>
+                    </div>
+                    <details className="border-t border-line/60">
+                      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 px-5 py-2 text-xs font-medium text-muted hover:text-ink">
+                        <Settings2 className="size-3.5" /> Réglages du compte
+                        <span className="text-faint">
+                          · visibilité : {p.privacyOptions.find((o) => o.value === a.defaultPrivacy)?.label ?? `${p.privacyOptions.find((o) => o.value === p.defaultPrivacy)?.label ?? p.defaultPrivacy} (défaut)`}
+                          {" "}· {a.dailyCap ? `${a.dailyCap} max / 24 h` : "pas de plafond"}
+                          {a.checkedAt ? ` · vérifié ${ago(a.checkedAt)}` : ""}
+                        </span>
+                      </summary>
+                      <div className="space-y-3 px-5 pb-4 pt-1">
+                        <ActionForm action={updateAccountSettings} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" messageClassName="sm:col-span-3">
+                          <input type="hidden" name="id" value={a.id} />
+                          <Field label="Visibilité par défaut">
+                            <Select name="defaultPrivacy" defaultValue={a.defaultPrivacy ?? ""}>
+                              <option value="">Celle de {p.label} ({p.privacyOptions.find((o) => o.value === p.defaultPrivacy)?.label ?? p.defaultPrivacy})</option>
+                              {p.privacyOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </Select>
+                          </Field>
+                          <Field label="Plafond sur 24 h">
+                            <Input name="dailyCap" type="number" min={1} max={50} defaultValue={a.dailyCap ?? ""} placeholder="Aucun" />
+                          </Field>
+                          <div className="flex items-end"><SubmitButton size="sm" pendingLabel="…" className="h-10 w-full">Enregistrer</SubmitButton></div>
+                        </ActionForm>
+                        <ActionForm action={testAccount} className="flex flex-wrap items-center gap-3" messageClassName="w-full">
+                          <input type="hidden" name="id" value={a.id} />
+                          <SubmitButton size="sm" pendingLabel="Test en cours…"><Plug className="size-3.5" /> Tester la connexion</SubmitButton>
+                          <span className="text-xs text-faint">Relit le profil du compte avec son accès enregistré (rien n&apos;est publié).</span>
+                        </ActionForm>
+                      </div>
+                    </details>
                     </li>
                   ))}
                 </ul>

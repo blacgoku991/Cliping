@@ -7,11 +7,22 @@ import { parseSettings } from "@/lib/settings";
 import { clipDir, clipFile, ensureDir, recordingDir, removeDir } from "@/lib/storage";
 import { detectOffline, snapToQuiet, type FeatureRow } from "./analysis/detector";
 import { analyzeMedia } from "./analysis/features";
-import { keyframeAtOrBefore } from "./analysis/probe";
+import { keyframeAtOrBefore, probe } from "./analysis/probe";
 import { log, run, runOk } from "./proc";
 import { CUT_PAD_SEC, detectorOptionsFor, fmt } from "./recorder";
 
 const MAX_VOD_HOURS = Number(process.env.MAX_VOD_HOURS ?? 6);
+/**
+ * Au-dessous de cette durée, la vidéo importée est déjà un clip (clip Twitch/Kick, Short, TikTok) :
+ * on la monte telle quelle au format vertical, sans chercher de moments forts.
+ */
+export const SHORT_VIDEO_MAX_SEC = Number(process.env.SHORT_VIDEO_MAX_SEC ?? 150);
+
+/** Vrai si la vidéo doit être traitée comme un clip déjà prêt (et non comme un replay à analyser). */
+export function isShortVideo(durationSec: number | null | undefined, options: { startSec?: number; endSec?: number }): boolean {
+  if (options.startSec || options.endSec) return false; // plage demandée : l'utilisateur veut une analyse
+  return !!durationSec && durationSec > 0 && durationSec <= SHORT_VIDEO_MAX_SEC;
+}
 
 interface VodOptions {
   startSec?: number;
@@ -27,6 +38,15 @@ interface YtdlpInfo {
   is_live?: boolean;
   categories?: string[];
   extractor_key?: string;
+  uploader_id?: string;
+}
+
+/** Nom crédité sur le clip pour une vidéo importée (sans chaîne suivie associée). */
+export function authorFromInfo(info: YtdlpInfo): string | null {
+  const key = (info.extractor_key ?? "").toLowerCase();
+  // TikTok : « uploader » est le @pseudo, plus utile en crédit que le surnom affiché.
+  if (key.startsWith("tiktok") && info.uploader) return `tiktok.com/@${info.uploader.replace(/^@/, "")}`;
+  return info.channel ?? info.uploader ?? null;
 }
 
 function ytdlpFailure(stderr: string): string {
@@ -69,8 +89,9 @@ export async function importVod(recordingId: string): Promise<void> {
     }
     await db.recording.update({
       where: { id: recordingId },
-      data: { title: info.title?.slice(0, 300) ?? null, author: info.channel ?? info.uploader ?? null, category: info.categories?.[0] ?? null },
+      data: { title: info.title?.slice(0, 300) ?? null, author: authorFromInfo(info), category: info.categories?.[0] ?? null },
     });
+    const short = isShortVideo(info.duration, options);
 
     // 2. Téléchargement (1080p max : inutile de prendre plus pour une sortie 1080×1920)
     const dlArgs = [
@@ -102,6 +123,11 @@ export async function importVod(recordingId: string): Promise<void> {
     if (!file) throw new Error("Téléchargement terminé mais fichier introuvable");
     const vod = path.join(dir, file);
     await setProgress(0.55);
+
+    if (short) {
+      await importAsClip(recording.id, recording.userId, recording.streamerId, vod, settings);
+      return;
+    }
 
     // 3. Analyse complète puis sélection des meilleurs moments
     const features = await analyzeMedia(vod);
@@ -174,6 +200,62 @@ export async function importVod(recordingId: string): Promise<void> {
   } finally {
     await removeDir(dir);
   }
+}
+
+/**
+ * Vidéo courte (clip existant) : elle devient directement un clip, de la première à la dernière seconde,
+ * envoyé au montage vertical (sous-titres, titre, crédit) comme n'importe quel moment fort.
+ */
+async function importAsClip(
+  recordingId: string,
+  userId: string,
+  streamerId: string | null,
+  vod: string,
+  settings: ReturnType<typeof parseSettings>,
+): Promise<void> {
+  const info = await probe(vod);
+  if (!info.hasVideo || info.duration < 1) throw new PermanentError("La vidéo téléchargée est vide ou illisible.");
+  if (info.duration < 5) throw new PermanentError("Vidéo trop courte (moins de 5 secondes) pour en faire un clip.");
+  const dur = Math.min(info.duration, 180); // limite des formats courts
+  // Vidéo déjà verticale : pas de fond flouté, elle remplit l'écran telle quelle.
+  const portrait = info.height > info.width;
+  const template = portrait ? "FULL" : settings.template === "FACECAM" ? "BLUR" : settings.template;
+  const clip = await db.clip.create({
+    data: {
+      userId,
+      recordingId,
+      streamerId,
+      status: "PROCESSING",
+      template,
+      originSec: 0,
+      peakSec: dur / 2,
+      startSec: 0,
+      endSec: dur,
+      sourceDur: info.duration,
+      score: 0,
+      signals: { imported: true },
+      captions: settings.captions,
+    },
+  });
+  try {
+    await ensureDir(clipDir(clip.id));
+    await runOk(
+      env.bin.ffmpeg,
+      ["-hide_banner", "-loglevel", "error", "-y", "-i", vod,
+        "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy", "-movflags", "+faststart", clipFile(clip.id, "source")],
+      { timeoutMs: 300_000 },
+    );
+  } catch (err) {
+    await db.clip.delete({ where: { id: clip.id } }).catch(() => {});
+    await removeDir(clipDir(clip.id));
+    throw err;
+  }
+  await enqueue("clip.process", { clipId: clip.id });
+  await db.recording.update({
+    where: { id: recordingId },
+    data: { status: "DONE", progress: 1, endedAt: new Date(), durationSec: info.duration, error: null, options: { kind: "clip" } },
+  });
+  log("vod", `clip importé tel quel (${fmt(info.duration)}) → ${clip.id}`);
 }
 
 /** Appelé quand l'import a définitivement échoué (plus de nouvelle tentative). */

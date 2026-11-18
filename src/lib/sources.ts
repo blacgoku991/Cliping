@@ -1,4 +1,11 @@
-export type SourcePlatformName = "TWITCH" | "KICK" | "YOUTUBE" | "OTHER";
+export type SourcePlatformName = "TWITCH" | "KICK" | "YOUTUBE" | "TIKTOK" | "OTHER";
+
+export const SOURCE_PLATFORMS: Array<{ id: Exclude<SourcePlatformName, "OTHER">; label: string }> = [
+  { id: "TWITCH", label: "Twitch" },
+  { id: "KICK", label: "Kick" },
+  { id: "YOUTUBE", label: "YouTube" },
+  { id: "TIKTOK", label: "TikTok Live" },
+];
 
 export interface ParsedSource {
   platform: SourcePlatformName;
@@ -29,12 +36,16 @@ export function parseChannel(input: string, fallbackPlatform: SourcePlatformName
   const raw = input.trim();
   if (!raw) return null;
 
+  // Pseudo TikTok : peut contenir des points (« jean.dupont »), on ne le confond pas avec un domaine.
+  if (fallbackPlatform === "TIKTOK" && /^@?[a-zA-Z0-9_.]{2,24}$/.test(raw)) return tiktokLive(raw.replace(/^@/, ""));
+
   // Simple pseudo sans domaine : on s'appuie sur la plateforme choisie.
   if (/^@?[a-zA-Z0-9_.-]{2,40}$/.test(raw) && !raw.includes(".")) {
     const name = raw.replace(/^@/, "");
     if (fallbackPlatform === "TWITCH") return twitch(name);
     if (fallbackPlatform === "KICK") return kick(name);
     if (fallbackPlatform === "YOUTUBE") return youtube(`@${name}`);
+    if (fallbackPlatform === "TIKTOK") return tiktokLive(name);
     return null;
   }
 
@@ -60,6 +71,14 @@ export function parseChannel(input: string, fallbackPlatform: SourcePlatformName
     if ((first === "channel" || first === "c" || first === "user") && parts[1]) return youtube(`${first}/${parts[1]}`);
     return null;
   }
+  if (host === "tiktok.com") {
+    // tiktok.com/@pseudo ou tiktok.com/@pseudo/live (une vidéo /video/… n'est pas une chaîne)
+    const first = parts[0];
+    if (!first?.startsWith("@") || (parts[1] && parts[1] !== "live")) return null;
+    const name = first.slice(1);
+    if (!/^[a-zA-Z0-9_.]{2,24}$/.test(name)) return null;
+    return tiktokLive(name);
+  }
   // Tout autre flux lisible par streamlink (HLS direct, etc.)
   return {
     platform: "OTHER",
@@ -79,6 +98,12 @@ function kick(name: string): ParsedSource {
   return { platform: "KICK", login, url: `https://kick.com/${login}`, displayName: name };
 }
 
+function tiktokLive(name: string): ParsedSource {
+  const login = name.toLowerCase();
+  // Format reconnu par le plugin « tiktok » de streamlink
+  return { platform: "TIKTOK", login, url: `https://www.tiktok.com/@${login}/live`, displayName: `@${name}` };
+}
+
 function youtube(pathPart: string): ParsedSource {
   const display = pathPart.startsWith("@") ? pathPart.slice(1) : (pathPart.split("/")[1] ?? pathPart);
   return {
@@ -94,6 +119,7 @@ export function creditLabel(platform: SourcePlatformName, login: string, display
   if (platform === "TWITCH") return `twitch.tv/${login}`;
   if (platform === "KICK") return `kick.com/${login}`;
   if (platform === "YOUTUBE") return login.startsWith("@") ? `youtube.com/${login}` : `YouTube · ${displayName}`;
+  if (platform === "TIKTOK") return `tiktok.com/@${login}`;
   return displayName;
 }
 

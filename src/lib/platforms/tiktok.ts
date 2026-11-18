@@ -224,6 +224,9 @@ export const tiktok: PlatformAdapter = {
       user?: { open_id?: string; avatar_url?: string; display_name?: string };
     }>;
     const user = json.data?.user;
+    if (res.status === 401 || json.error?.code === "access_token_invalid") {
+      throw new ReauthRequiredError("Accès TikTok refusé ou expiré : reconnecte le compte.");
+    }
     if (!res.ok || !user?.open_id) throw new Error(`TikTok : profil illisible (${json.error?.message ?? `HTTP ${res.status}`})`);
     return { externalId: user.open_id, displayName: user.display_name ?? "Compte TikTok", handle: null, avatarUrl: user.avatar_url ?? null };
   },

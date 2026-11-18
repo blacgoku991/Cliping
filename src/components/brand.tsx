@@ -52,6 +52,7 @@ export function SourceIcon({ platform, className }: { platform: string; classNam
   if (platform === "TWITCH") return <TwitchIcon className={cx("text-[#a970ff]", className)} />;
   if (platform === "KICK") return <KickIcon className={cx("text-[#53fc18]", className)} />;
   if (platform === "YOUTUBE") return <YouTubeIcon className={cx("text-[#ff3333]", className)} />;
+  if (platform === "TIKTOK") return <TikTokIcon className={cx("text-ink", className)} />;
   return <span className={cx("inline-block rounded bg-muted", className)} />;
 }
 
