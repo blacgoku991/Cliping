@@ -13,8 +13,12 @@ const PendingContext = createContext(false);
 
 /**
  * Formulaire relié à une action serveur qui renvoie { error } ou { ok }.
- * L'envoi passe par onSubmit (et non par l'attribut action) pour que les champs
- * gardent leur contenu quand le serveur renvoie une erreur de validation.
+ *
+ * Une fois la page chargée, l'envoi passe par onSubmit : les champs gardent ainsi leur contenu
+ * quand le serveur renvoie une erreur de validation (React viderait le formulaire sinon).
+ * L'attribut `action` reste renseigné pour le cas où le JavaScript n'est pas (encore) chargé :
+ * le navigateur envoie alors le formulaire en POST à l'action serveur, au lieu d'un GET
+ * qui mettrait la saisie — mot de passe compris — dans l'adresse de la page.
  */
 export function ActionForm({
   action,
@@ -38,6 +42,7 @@ export function ActionForm({
   return (
     <form
       ref={ref}
+      action={formAction}
       className={className}
       onSubmit={(e) => {
         e.preventDefault();
