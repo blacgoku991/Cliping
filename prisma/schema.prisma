@@ -1,0 +1,286 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── Utilisateurs & sessions ─────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  /// Préférences de clipping (voir src/lib/settings.ts)
+  settings     Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  sessions     Session[]
+  streamers    Streamer[]
+  recordings   Recording[]
+  clips        Clip[]
+  accounts     SocialAccount[]
+  publications Publication[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  /// SHA-256 du jeton stocké dans le cookie (le jeton en clair n'est jamais en base)
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ───────────────────────── Sources (streamers surveillés) ─────────────────────────
+
+enum SourcePlatform {
+  TWITCH
+  KICK
+  YOUTUBE
+  OTHER
+}
+
+model Streamer {
+  id          String         @id @default(cuid())
+  userId      String
+  platform    SourcePlatform
+  /// Identifiant de chaîne normalisé (login Twitch, slug Kick, @handle YouTube…)
+  login       String
+  url         String
+  displayName String
+  enabled     Boolean        @default(true)
+  /// Liste de catégories séparées par des virgules ; vide = tout enregistrer
+  gameFilter  String         @default("")
+  quality     String         @default("best")
+  /// Zone facecam en fractions de l'image source {x,y,w,h} (pour le template FACECAM)
+  facecam     Json?
+
+  isLive        Boolean   @default(false)
+  liveTitle     String?
+  liveCategory  String?
+  lastCheckedAt DateTime?
+  lastLiveAt    DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recordings Recording[]
+  clips      Clip[]
+
+  @@unique([userId, platform, login])
+  @@index([enabled])
+}
+
+enum RecordingSource {
+  LIVE
+  VOD
+}
+
+enum RecordingStatus {
+  PENDING
+  RECORDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model Recording {
+  id          String          @id @default(cuid())
+  userId      String
+  streamerId  String?
+  source      RecordingSource
+  sourceUrl   String
+  status      RecordingStatus @default(PENDING)
+  title       String?
+  category    String?
+  /// Nom de la chaîne d'origine (imports de VOD sans streamer associé)
+  author      String?
+  /// Durée analysée, en secondes
+  durationSec Float           @default(0)
+  /// Progression 0..1 (import VOD)
+  progress    Float           @default(0)
+  /// Options d'import (plage, nombre max de clips…)
+  options     Json            @default("{}")
+  error       String?
+  startedAt   DateTime        @default(now())
+  endedAt     DateTime?
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamer Streamer? @relation(fields: [streamerId], references: [id], onDelete: SetNull)
+  clips    Clip[]
+
+  @@index([userId, startedAt])
+  @@index([status])
+}
+
+// ───────────────────────── Clips ─────────────────────────
+
+enum ClipStatus {
+  PROCESSING
+  READY
+  APPROVED
+  REJECTED
+  FAILED
+}
+
+enum ClipTemplate {
+  BLUR
+  FULL
+  FACECAM
+}
+
+model Clip {
+  id          String       @id @default(cuid())
+  userId      String
+  recordingId String?
+  streamerId  String?
+  status      ClipStatus   @default(PROCESSING)
+  template    ClipTemplate @default(BLUR)
+
+  /// Position, dans l'enregistrement d'origine, du début de source.mp4 (secondes)
+  originSec   Float        @default(0)
+  /// Moment fort et fenêtre du clip, en secondes à l'intérieur de source.mp4
+  peakSec     Float
+  startSec    Float
+  endSec      Float
+  /// Durée totale de source.mp4 (marge incluse, pour pouvoir re-découper)
+  sourceDur   Float        @default(0)
+  /// Score de viralité 0..100
+  score       Int          @default(0)
+  /// Détail des signaux {audio, chat, scene, ai, reason}
+  signals     Json         @default("{}")
+
+  title       String       @default("")
+  hook        String       @default("")
+  description String       @default("")
+  hashtags    String[]     @default([])
+  /// Transcription mot à mot [{w, s, e}] relative au début de source.mp4
+  transcript  Json?
+  captions    Boolean      @default(true)
+
+  /// Noms de fichiers relatifs au dossier du clip
+  hasFinal    Boolean      @default(false)
+  renderedAt  DateTime?
+  error       String?
+  createdAt   DateTime     @default(now())
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recording    Recording?    @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+  streamer     Streamer?     @relation(fields: [streamerId], references: [id], onDelete: SetNull)
+  publications Publication[]
+
+  @@index([userId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+// ───────────────────────── Comptes sociaux & publications ─────────────────────────
+
+enum SocialPlatform {
+  YOUTUBE
+  TIKTOK
+}
+
+model SocialAccount {
+  id              String         @id @default(cuid())
+  userId          String
+  platform        SocialPlatform
+  /// ID de chaîne YouTube ou open_id TikTok
+  externalId      String
+  displayName     String
+  handle          String?
+  avatarUrl       String?
+  /// Jetons chiffrés AES-256-GCM (voir src/lib/crypto.ts)
+  accessTokenEnc  String
+  refreshTokenEnc String?
+  expiresAt       DateTime?
+  scopes          String         @default("")
+  /// Faux = le jeton a été révoqué ou n'a pas pu être rafraîchi : reconnexion requise
+  valid           Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publications Publication[]
+
+  @@unique([userId, platform, externalId])
+}
+
+enum PublicationStatus {
+  QUEUED
+  UPLOADING
+  PROCESSING
+  PUBLISHED
+  FAILED
+  CANCELED
+}
+
+model Publication {
+  id          String            @id @default(cuid())
+  userId      String
+  clipId      String
+  accountId   String
+  status      PublicationStatus @default(QUEUED)
+  title       String
+  description String            @default("")
+  /// public | unlisted | private (YouTube) — public | followers | friends | private | draft (TikTok)
+  privacy     String            @default("public")
+  scheduledAt DateTime          @default(now())
+  publishedAt DateTime?
+  /// ID de la vidéo côté plateforme (videoId YouTube, publish_id / post id TikTok)
+  externalId  String?
+  externalUrl String?
+  /// Information non bloquante renvoyée par la plateforme (ex. « envoyé dans tes brouillons »)
+  note        String?
+  /// État d'envoi repris en cas de nouvelle tentative (URI de session d'upload…)
+  uploadState Json?
+  error       String?
+  createdAt   DateTime          @default(now())
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clip    Clip          @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  account SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([clipId])
+}
+
+// ───────────────────────── File de tâches (Postgres, SKIP LOCKED) ─────────────────────────
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String
+  payload     Json
+  status      JobStatus @default(PENDING)
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([status, runAt])
+}
+
+/// État partagé entre le worker et le site (battement de cœur, etc.)
+model KeyValue {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
