@@ -36,7 +36,7 @@ export default async function QueuePage({ searchParams }: { searchParams: Promis
       <PageHeader
         title="Publications"
         subtitle="Tout ce qui est programmé, en cours d'envoi ou déjà en ligne sur tes comptes."
-        action={<LinkButton href="/app/queue/plan" variant="primary" size="sm"><CalendarRange className="size-3.5" /> Planifier en lot</LinkButton>}
+        action={<LinkButton href="/app/queue/plan" variant="primary" size="sm"><CalendarRange className="size-3.5" /> Planifier tous les clips approuvés</LinkButton>}
       />
       {planned ? <Notice tone="ok" className="mb-5">{planned} publication{planned > 1 ? "s" : ""} programmée{planned > 1 ? "s" : ""}. Chacune part à son heure ; tu peux en annuler une ci-dessous.</Notice> : null}
       {pubs.length === 0 ? (
