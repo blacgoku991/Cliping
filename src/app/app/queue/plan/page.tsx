@@ -42,7 +42,7 @@ export default async function PlanPage() {
             action={planAccounts.length === 0 ? <LinkButton href="/app/accounts" variant="primary">Connecter un compte</LinkButton> : <LinkButton href="/app/clips?tab=review" variant="primary">Valider des clips</LinkButton>}
           >
             {planAccounts.length === 0
-              ? "Connecte au moins un compte TikTok ou YouTube (ou reconnecte ceux qui ont expiré)."
+              ? "Connecte au moins un compte TikTok, YouTube ou Instagram (ou reconnecte ceux qui ont expiré)."
               : "Le lot se compose des clips approuvés qui ne sont encore programmés sur aucun compte. Approuve des clips dans « Clips »."}
           </EmptyState>
         </Card>

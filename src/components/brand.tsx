@@ -40,6 +40,16 @@ export function TikTokIcon({ className }: IconProps) {
   );
 }
 
+export function InstagramIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="5.5" />
+      <circle cx="12" cy="12" r="4.2" />
+      <circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function KickIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
@@ -58,5 +68,6 @@ export function SourceIcon({ platform, className }: { platform: string; classNam
 
 export function SocialIcon({ platform, className }: { platform: string; className?: string }) {
   if (platform === "YOUTUBE") return <YouTubeIcon className={cx("text-[#ff3333]", className)} />;
+  if (platform === "INSTAGRAM") return <InstagramIcon className={cx("text-[#ff4f8b]", className)} />;
   return <TikTokIcon className={cx("text-ink", className)} />;
 }

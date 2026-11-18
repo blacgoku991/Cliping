@@ -145,7 +145,9 @@ export function templateProfile(platform: SocialPlatform, input: ProfileInput, g
       "Photo : un logo simple ou un visuel net, lisible en tout petit. Pas le logo du jeu ni la photo d'un streamer.",
       platform === "TIKTOK"
         ? "Lien : selon ton compte, TikTok n'affiche pas toujours le champ « site web ». Tu peux citer tes autres comptes dans la bio."
-        : "Liens : ajoute-les dans Personnalisation de la chaîne → Infos de base (tes autres comptes, le live du streamer avec son accord).",
+        : platform === "INSTAGRAM"
+          ? "Liens : ajoute-les dans Modifier le profil → Liens, par exemple ta chaîne YouTube ou ton TikTok."
+          : "Liens : ajoute-les dans Personnalisation de la chaîne → Infos de base (tes autres comptes, le live du streamer avec son accord).",
     ],
     source: "template",
   };

@@ -4,6 +4,7 @@ import type { Job } from "@prisma/client";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { claimJob, completeJob, failJob, requeueStaleJobs, type JobPayloads, type JobType } from "@/lib/jobs";
+import { renewExpiringTokens } from "@/lib/platforms";
 import { ensureDir } from "@/lib/storage";
 import { cleanup } from "./cleanup";
 import { DISCOVERY_INTERVAL_SEC, discoveryEnabled, refreshDiscovery } from "./discovery";
@@ -123,6 +124,8 @@ async function heartbeatLoop(): Promise<void> {
     if (Date.now() - lastCleanup > 6 * 3600_000) {
       lastCleanup = Date.now();
       await cleanup().catch((err) => log("cleanup", `erreur : ${err instanceof Error ? err.message : err}`));
+      const renewed = await renewExpiringTokens().catch(() => 0);
+      if (renewed) log("accounts", `${renewed} accès renouvelé(s) avant expiration`);
     }
     await requeueStaleJobs(2 * 3600_000).catch(() => {});
     await sleep(10_000);

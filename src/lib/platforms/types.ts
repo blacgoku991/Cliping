@@ -27,6 +27,8 @@ export interface PublishInput {
   state: Record<string, unknown>;
   /** Persiste l'état d'envoi pour qu'une nouvelle tentative reprenne au lieu de republier */
   saveState: (state: Record<string, unknown>) => Promise<void>;
+  /** Adresse publique, signée et temporaire de la vidéo, pour les plateformes qui viennent la chercher (Instagram) */
+  mediaUrl?: () => string;
 }
 
 export interface PublishResult {
@@ -52,6 +54,8 @@ export interface PlatformAdapter {
   requiredEnv: string[];
   privacyOptions: PrivacyOption[];
   defaultPrivacy: string;
+  /** Renouveler le jeton dès qu'il expire dans moins de ce délai (défaut : 2 minutes) */
+  refreshBeforeMs?: number;
   authUrl(state: string): string;
   exchangeCode(code: string): Promise<TokenSet>;
   refresh(refreshToken: string): Promise<TokenSet>;

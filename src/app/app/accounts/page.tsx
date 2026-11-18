@@ -10,6 +10,7 @@ import { env } from "@/lib/env";
 import { ago } from "@/lib/format";
 import { PLATFORMS } from "@/lib/platforms";
 import { redirectUri } from "@/lib/platforms/types";
+import { appUrlIsPrivate } from "@/lib/public-media";
 import { requireUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Comptes" };
@@ -23,6 +24,18 @@ const TIPS: Record<string, string[]> = {
     "Mode « Brouillon » (par défaut) : la vidéo arrive dans les notifications de ton app TikTok, tu ajoutes un son si tu veux et tu postes. C'est le mode qui marche sans audit de ton application.",
     "La publication directe en public demande que ton application TikTok ait passé l'audit « Content Posting API ». Avant ça, TikTok n'accepte que « Moi uniquement », et seulement sur un compte privé.",
   ],
+  INSTAGRAM: [
+    "Seuls les comptes professionnels (Business ou Créateur) peuvent publier par l'API. Un compte personnel se convertit gratuitement dans l'app : Paramètres → Type de compte et outils.",
+    "Tant que ton application Meta n'est pas validée par Meta (App Review), elle ne peut publier que sur les comptes ajoutés comme testeurs dans ses réglages (Rôles de l'app).",
+    "Pour connecter un autre compte, déconnecte-toi d'abord d'Instagram sur instagram.com dans ce navigateur (ou ouvre une fenêtre privée), puis clique « Connecter un compte ».",
+    "Instagram vient chercher la vidéo sur ton serveur par un lien temporaire signé, valable 2 heures et pour ce seul clip : ton app doit être en ligne en HTTPS.",
+  ],
+};
+
+const SETUP: Record<string, string> = {
+  YOUTUBE: "Google Cloud (API « YouTube Data API v3 »)",
+  TIKTOK: "TikTok for Developers (produits « Login Kit » et « Content Posting API »)",
+  INSTAGRAM: "Meta for Developers (cas d'usage Instagram, « API setup with Instagram login », permissions instagram_business_basic et instagram_business_content_publish)",
 };
 
 export default async function AccountsPage({ searchParams }: { searchParams: Promise<{ connected?: string; error?: string }> }) {
@@ -36,7 +49,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="Comptes" subtitle="Connecte autant de comptes TikTok et de chaînes YouTube que tu veux. Tu choisis ensuite où publier, clip par clip ou en lot depuis « Publications »." />
+      <PageHeader title="Comptes" subtitle="Connecte autant de comptes TikTok, Instagram et de chaînes YouTube que tu veux. Tu choisis ensuite où publier, clip par clip ou en lot depuis « Publications »." />
       {sp.connected ? <Notice tone="ok" className="mb-5">Compte connecté : {sp.connected}</Notice> : null}
       {sp.error ? <Notice tone="bad" className="mb-5">{sp.error}</Notice> : null}
       {env.encryptionKey.length < 32 ? (
@@ -66,12 +79,18 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
                 <div className="space-y-2 border-b border-line bg-warn/5 px-5 py-4 text-sm leading-relaxed">
                   <p className="font-medium text-warn">À configurer sur le serveur</p>
                   <p className="text-muted">
-                    Crée une application développeur {p.id === "YOUTUBE" ? "Google Cloud (API « YouTube Data API v3 »)" : "TikTok for Developers (produits « Login Kit » et « Content Posting API »)"}, puis renseigne{" "}
+                    Crée une application développeur {SETUP[p.id]}, puis renseigne{" "}
                     {p.requiredEnv.map((v, i) => <span key={v}>{i ? " et " : ""}<code className="rounded bg-black/30 px-1.5 py-0.5 text-xs">{v}</code></span>)} dans le fichier <code className="rounded bg-black/30 px-1.5 py-0.5 text-xs">.env</code> et redémarre.
                   </p>
                   <p className="text-muted">
                     Adresse de redirection à déclarer : <code className="break-all rounded bg-black/30 px-1.5 py-0.5 text-xs">{redirectUri(env.appUrl, p.id)}</code>
                   </p>
+                </div>
+              ) : null}
+              {p.id === "INSTAGRAM" && ready && appUrlIsPrivate() ? (
+                <div className="border-b border-line bg-warn/5 px-5 py-3 text-sm leading-relaxed text-muted">
+                  <span className="font-medium text-warn">Publication impossible depuis cette adresse.</span> Instagram vient chercher la vidéo sur ton serveur, mais{" "}
+                  <code className="break-all rounded bg-black/30 px-1.5 py-0.5 text-xs">{env.appUrl}</code> n&apos;est pas joignable depuis Internet. Mets l&apos;app en ligne en HTTPS (voir le README) et renseigne APP_URL.
                 </div>
               ) : null}
               {mine.length > 0 ? (

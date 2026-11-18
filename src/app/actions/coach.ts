@@ -95,7 +95,9 @@ export async function saveClipKit(_prev: FormState, form: FormData): Promise<For
   if (clip.status === "PROCESSING") return { error: "Attends la fin du montage du clip." };
 
   const connected = await db.socialAccount.findMany({ where: { userId: user.id }, select: { platform: true }, distinct: ["platform"] });
-  const platforms: SocialPlatform[] = connected.length ? connected.map((a) => a.platform).sort().reverse() : ["TIKTOK", "YOUTUBE"];
+  // Le kit de publication ne couvre que TikTok et YouTube pour l'instant.
+  const kitPlatforms = connected.map((a) => a.platform).filter((p) => p === "TIKTOK" || p === "YOUTUBE");
+  const platforms: SocialPlatform[] = kitPlatforms.length ? kitPlatforms.sort().reverse() : ["TIKTOK", "YOUTUBE"];
   const signals = (clip.signals ?? {}) as ClipContext["signals"];
   const ctx: ClipContext = {
     streamer: clip.streamer?.displayName ?? clip.recording?.author ?? "",
