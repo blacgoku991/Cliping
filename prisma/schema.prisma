@@ -275,12 +275,45 @@ model Publication {
   error       String?
   createdAt   DateTime          @default(now())
 
-  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clip    Clip          @relation(fields: [clipId], references: [id], onDelete: Cascade)
-  account SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Suivi des performances (voir src/worker/stats.ts) : dernier relevé connu
+  viewCount    Int?
+  likeCount    Int?
+  commentCount Int?
+  /// Absent sur YouTube (l'API ne donne pas les partages)
+  shareCount   Int?
+  /// null = pas encore relevé · OK · DRAFT (brouillon TikTok, pas d'identifiant public) · NO_SCOPE (autorisation manquante)
+  /// NO_ID (identifiant public inconnu) · NOT_FOUND (vidéo supprimée) · ENDED (suivi terminé) · ERROR
+  statsStatus  String?
+  statsError   String?
+  statsAt      DateTime?
+  /// Prochain relevé prévu (plus fréquent dans les premières heures)
+  statsNextAt  DateTime?
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clip    Clip              @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  account SocialAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  stats   PublicationStat[]
 
   @@index([userId, createdAt])
   @@index([clipId])
+  @@index([status, statsNextAt])
+}
+
+/// Historique des relevés de performances d'une publication (pour tracer les courbes)
+model PublicationStat {
+  id            String      @id @default(cuid())
+  publicationId String
+  userId        String
+  at            DateTime    @default(now())
+  views         Int
+  likes         Int?
+  comments      Int?
+  shares        Int?
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@index([publicationId, at])
+  @@index([userId, at])
 }
 
 // ───────────────────────── Découverte des lives d'un jeu ─────────────────────────

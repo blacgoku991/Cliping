@@ -1,7 +1,16 @@
 import type { Job, Prisma } from "@prisma/client";
 import { db } from "./db";
 
-export type JobType = "clip.process" | "clip.render" | "vod.import" | "publish" | "publish.check" | "cleanup" | "discovery.refresh";
+// Un type par ligne : plusieurs chantiers en ajoutent, les fusions restent lisibles.
+export type JobType =
+  | "clip.process"
+  | "clip.render"
+  | "vod.import"
+  | "publish"
+  | "publish.check"
+  | "cleanup"
+  | "discovery.refresh"
+  | "stats.collect";
 
 export interface JobPayloads {
   "clip.process": { clipId: string };
@@ -11,6 +20,7 @@ export interface JobPayloads {
   "publish.check": { publicationId: string };
   cleanup: Record<string, never>;
   "discovery.refresh": { userId: string };
+  "stats.collect": Record<string, never>;
 }
 
 export async function enqueue<T extends JobType>(
