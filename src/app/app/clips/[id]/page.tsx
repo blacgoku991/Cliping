@@ -42,6 +42,11 @@ function Signal({ icon, label, value }: { icon: React.ReactNode; label: string; 
   );
 }
 
+function hookAnglesOf(signals: unknown): string[] {
+  const a = (signals as { hookAngles?: unknown } | null)?.hookAngles;
+  return Array.isArray(a) ? a.filter((x): x is string => typeof x === "string") : [];
+}
+
 export default async function ClipPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await params;
@@ -183,6 +188,7 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
                     peakSec: clip.peakSec,
                     titleOptions: clip.titleOptions,
                     hookOptions: clip.hookOptions,
+                    hookAngles: hookAnglesOf(clip.signals),
                     edit: effectiveEdit(parseSettings(user.settings), clip.edit),
                     montage: montageSummary(clip.montage),
                   }}

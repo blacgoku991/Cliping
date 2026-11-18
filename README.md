@@ -114,7 +114,8 @@ Ce qui fait qu'un clip est regardé jusqu'au bout, ce sont les deux premières s
 - **Zoom d'impact** : +12 % progressif sur le gameplay au moment fort, puis retour.
 - **Sous-titres** : cinq styles (Classique, Impact, Encadré, Karaoké, Discret), avec les mots forts mis en valeur (choisis par l'IA, sinon exclamations, chiffres et mots criés).
 - **Barre de progression** fine en haut de l'image, et **carton de fin** optionnel (appel à s'abonner + crédit du streamer, désactivé par défaut : il casse la boucle de relecture).
-- **Trois accroches et trois titres** proposés par l'IA (ou des variantes neutres sans IA), à choisir d'un clic dans l'éditeur.
+- **Trois accroches et trois titres** proposés par l'IA (ou des variantes neutres sans IA), à choisir d'un clic dans l'éditeur. L'IA voit quatre images de l'extrait autour du pic en plus de la transcription, écrit 6 à 8 accroches sous des angles différents (curiosité, enjeu, réaction, citation, question) et n'en garde que trois ; les formules creuses (« REGARDEZ ÇA », « INCROYABLE ») et les accroches de plus de 7 mots sont écartées.
+- **Zone sûre TikTok + Shorts** : tous les textes restent hors des zones couvertes par l'interface des deux applis (rien au-dessus de y = 220, sous y = 1440, ni dans les 170 px de droite où sont les boutons). Les clips durent par défaut de 15 à 45 s.
 
 Sur Kick, YouTube et TikTok, le chat n'est pas lu : la détection repose sur le son et l'image, et sera donc un peu moins fine que sur Twitch. (Kick ne propose officiellement la lecture du chat que par webhooks vers une adresse publique ; le websocket utilisé par son site n'est pas documenté et peut changer sans prévenir, il n'a donc pas été retenu.)
 

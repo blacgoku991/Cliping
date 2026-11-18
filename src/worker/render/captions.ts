@@ -91,23 +91,36 @@ export interface AssInput {
 export const OUT_W = 1080;
 export const OUT_H = 1920;
 
-/** Emplacements des textes selon le template (en pixels, image 1080×1920). */
+/**
+ * Zone sûre commune à TikTok et YouTube Shorts (image 1080×1920) : en dehors, les textes passent sous
+ * l'interface des applis (onglets et bouton LIVE en haut, colonne de boutons à droite, légende,
+ * pseudo et son en bas). On retient le plus contraignant des deux :
+ * haut 220 px, bas 480 px (rien sous y = 1440), droite 170 px, gauche 60 px.
+ */
+export const SAFE_ZONE = { top: 220, bottom: 1440, left: 60, right: OUT_W - 170 } as const;
+/** Marges de retour à la ligne des textes (largeur utile 820 px) */
+const SAFE_MARGIN_L = 90;
+const SAFE_MARGIN_R = 170;
+/** Les textes sont centrés sur la largeur utile, donc légèrement à gauche du centre de l'image. */
+export const SAFE_CENTER_X = Math.round((SAFE_MARGIN_L + OUT_W - SAFE_MARGIN_R) / 2);
+
+/** Emplacements des textes selon le template (en pixels, image 1080×1920), tous dans la zone sûre. */
 export function layoutFor(template: "BLUR" | "FULL" | "FACECAM", bandHeight: number): CaptionLayout {
   if (template === "BLUR") {
     const top = Math.round((OUT_H - bandHeight) / 2);
     const bottom = top + bandHeight;
     return {
-      // Sous la bande de gameplay, sans descendre dans la zone masquée par l'interface TikTok/Shorts.
-      captionY: Math.min(bottom + 120, 1500),
-      hookY: Math.max(300, Math.round((210 + top) / 2)),
+      // Juste sous la bande de gameplay, ou sur son bas quand elle descend trop : jamais sous la zone sûre.
+      captionY: Math.min(bottom + 90, 1340),
+      hookY: Math.max(360, Math.round((210 + top) / 2)),
       hookDuration: null,
-      credit: { x: 40, y: Math.max(top - 14, 250), an: 1 },
+      credit: { x: 64, y: Math.max(top - 14, 260), an: 1 },
     };
   }
   if (template === "FACECAM") {
-    return { captionY: 690, hookY: 1400, hookDuration: 4, credit: { x: 36, y: 190, an: 7 } };
+    return { captionY: 690, hookY: 1300, hookDuration: 4, credit: { x: 64, y: 240, an: 7 } };
   }
-  return { captionY: 1380, hookY: 340, hookDuration: null, credit: { x: 36, y: 190, an: 7 } };
+  return { captionY: 1300, hookY: 380, hookDuration: null, credit: { x: 64, y: 240, an: 7 } };
 }
 
 /** #RRGGBB → &HBBGGRR& (ordre des couleurs ASS) */
@@ -255,12 +268,12 @@ export function buildAss(input: AssInput): string {
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Caption,${capFont},${capSize},${capPrimary},&H00FFFFFF,${st.outlineColour},&H78000000,0,0,0,0,100,100,0,0,${st.borderStyle},${st.outline},${st.shadow},5,70,70,0,1`,
-    `Style: Hook,Anton,88,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,1,0,1,7,3,5,60,60,0,1`,
+    `Style: Caption,${capFont},${capSize},${capPrimary},&H00FFFFFF,${st.outlineColour},&H78000000,0,0,0,0,100,100,0,0,${st.borderStyle},${st.outline},${st.shadow},5,${SAFE_MARGIN_L},${SAFE_MARGIN_R},0,1`,
+    `Style: Hook,Anton,88,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,1,0,1,7,3,5,${SAFE_MARGIN_L},${SAFE_MARGIN_R},0,1`,
     `Style: Credit,Poppins ExtraBold,30,&H28FFFFFF,&H28FFFFFF,&H50000000,&H78000000,0,0,0,0,100,100,0,0,1,2,1,7,0,0,0,1`,
     `Style: Shape,Poppins ExtraBold,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1`,
-    `Style: CardTitle,Anton,118,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,1,0,1,8,3,5,60,60,0,1`,
-    `Style: CardSub,Poppins ExtraBold,50,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,0,0,1,4,2,5,60,60,0,1`,
+    `Style: CardTitle,Anton,118,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,1,0,1,8,3,5,${SAFE_MARGIN_L},${SAFE_MARGIN_R},0,1`,
+    `Style: CardSub,Poppins ExtraBold,50,&H00FFFFFF,&H00FFFFFF,&H00000000,&H78000000,0,0,0,0,100,100,0,0,1,4,2,5,${SAFE_MARGIN_L},${SAFE_MARGIN_R},0,1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -277,7 +290,7 @@ export function buildAss(input: AssInput): string {
   if (hook) {
     const wrapped = wrapLines(hook, 22, 3).join("\\N");
     const end = layout.hookDuration ? Math.min(endAt, layout.hookDuration) : endAt;
-    event(1, 0, end, "Hook", `{\\an5\\pos(${OUT_W / 2},${layout.hookY})\\fad(120,${layout.hookDuration ? 200 : 0})}${wrapped}`);
+    event(1, 0, end, "Hook", `{\\an5\\pos(${SAFE_CENTER_X},${layout.hookY})\\fad(120,${layout.hookDuration ? 200 : 0})}${wrapped}`);
   }
 
   // ── Sous-titres ──
@@ -306,7 +319,7 @@ export function buildAss(input: AssInput): string {
     const anim = from !== scale ? `\\t(0,90,\\fscx${scale}\\fscy${scale})` : "";
     return `{\\c${color}\\fscx${from}\\fscy${from}${anim}${extra}}${text}`;
   };
-  const pos = `\\an5\\pos(${OUT_W / 2},${layout.captionY})`;
+  const pos = `\\an5\\pos(${SAFE_CENTER_X},${layout.captionY})`;
 
   for (const chunk of chunkWords(words, st.maxWords, st.maxChars, input.breaks ?? [])) {
     if (st.mode === "line") {
@@ -369,11 +382,11 @@ export function buildAss(input: AssInput): string {
     event(7, endAt, total, "Shape", `{\\an7\\pos(0,0)\\bord0\\shad0\\c&H000000&\\1a&HFF&\\t(0,250,\\1a&H50&)\\p1}${RECT(OUT_W, OUT_H)}`);
     const title = wrapLines(cleanBurnText(c.title).toUpperCase(), 14, 3).join("\\N");
     if (title) {
-      event(8, endAt + 0.1, total, "CardTitle", `{\\an5\\pos(${OUT_W / 2},${OUT_H / 2 - 90})\\fscx80\\fscy80\\t(0,140,\\fscx100\\fscy100)\\fad(120,0)}${title}`);
+      event(8, endAt + 0.1, total, "CardTitle", `{\\an5\\pos(${SAFE_CENTER_X},${OUT_H / 2 - 90})\\fscx80\\fscy80\\t(0,140,\\fscx100\\fscy100)\\fad(120,0)}${title}`);
     }
     const cred = cleanBurnText(c.credit);
     if (cred) {
-      event(8, endAt + 0.25, total, "CardSub", `{\\an5\\pos(${OUT_W / 2},${OUT_H / 2 + 130})\\fad(150,0)}Clip : {\\c${hi}}${cred}`);
+      event(8, endAt + 0.25, total, "CardSub", `{\\an5\\pos(${SAFE_CENTER_X},${OUT_H / 2 + 130})\\fad(150,0)}Clip : {\\c${hi}}${cred}`);
     }
   }
   return lines.join("\n") + "\n";

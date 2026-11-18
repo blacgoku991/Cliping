@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { effectiveEdit, montageSummary, parseSettings } from "@/lib/settings";
-import { buildAss, CAPTION_STYLES, chunkWords, defaultEmphasis, layoutFor, normWord, type Word } from "@/worker/render/captions";
+import { buildAss, CAPTION_STYLES, chunkWords, defaultEmphasis, layoutFor, normWord, SAFE_CENTER_X, SAFE_ZONE, type Word } from "@/worker/render/captions";
+import { isGoodHook, pickHooks } from "@/worker/ai";
 import {
   buildPlan,
   findDeadAir,
@@ -298,5 +299,54 @@ describe("ponctuation isolée", () => {
     });
     expect(ass).toContain("INCROYABLE !");
     expect(ass.split("\n").filter((l) => l.startsWith("Dialogue: 2,"))).toHaveLength(1);
+  });
+});
+
+describe("accroches", () => {
+  it("écarte les formules creuses et les accroches trop longues", () => {
+    expect(isGoodHook("REGARDEZ ÇA")).toBe(false);
+    expect(isGoodHook("Incroyable !")).toBe(false);
+    expect(isGoodHook("attendez la fin")).toBe(false);
+    expect(isGoodHook("il vole la voiture du chef de la police ce soir")).toBe(false); // 10 mots
+    expect(isGoodHook("Il vole la voiture de police")).toBe(true);
+    expect(isGoodHook("Pourquoi il saute ? 🔥")).toBe(false);
+  });
+  it("garde trois accroches d'angles différents, en complétant avec les candidates", () => {
+    const picked = pickHooks(
+      [
+        { angle: "reaction", text: "Il hurle en pleine course" },
+        { angle: "reaction", text: "Il n'en revient pas" },
+        { angle: "curiosite", text: "INCROYABLE" },
+      ],
+      [
+        { angle: "question", text: "Comment il s'en sort ?" },
+        { angle: "citation", text: "« J'y crois pas frérot »" },
+        { angle: "reaction", text: "Il hurle en pleine course" },
+      ],
+    );
+    expect(picked.map((h) => h.angle)).toEqual(["reaction", "question", "citation"]);
+    expect(picked.map((h) => h.text)).not.toContain("INCROYABLE");
+  });
+});
+
+describe("zone sûre TikTok / Shorts", () => {
+  it("place tous les textes hors des zones masquées par les applis", () => {
+    for (const tpl of ["BLUR", "FULL", "FACECAM"] as const) {
+      for (const band of [608, 820, 1080]) {
+        const l = layoutFor(tpl, band);
+        expect(l.captionY + 90).toBeLessThanOrEqual(SAFE_ZONE.bottom);
+        expect(l.hookY - 135).toBeGreaterThanOrEqual(SAFE_ZONE.top);
+        expect(l.hookY + 135).toBeLessThanOrEqual(SAFE_ZONE.bottom);
+        expect(l.credit.y).toBeGreaterThanOrEqual(SAFE_ZONE.top);
+        expect(l.credit.x).toBeGreaterThanOrEqual(SAFE_ZONE.left);
+      }
+    }
+    // Largeur utile de 820 px centrée à gauche de la colonne de boutons.
+    expect(SAFE_CENTER_X + 410).toBeLessThanOrEqual(SAFE_ZONE.right);
+  });
+  it("durées par défaut dans la plage des formats courts", () => {
+    const s = parseSettings({});
+    expect(s.clipMinSec).toBe(15);
+    expect(s.clipMaxSec).toBe(45);
   });
 });
