@@ -152,7 +152,9 @@ export async function runAutopilot(userId: string): Promise<void> {
       userId,
       "autopilot",
       `ap-sched:${now}`,
-      dry ? `Simulation : ${n} clip${n > 1 ? "s" : ""} auraient été programmés` : `Pilote : ${n} clip${n > 1 ? "s" : ""} programmé${n > 1 ? "s" : ""}`,
+      dry
+        ? `Simulation : ${n > 1 ? `${n} clips auraient été programmés` : "1 clip aurait été programmé"}`
+        : `Pilote : ${n} clip${n > 1 ? "s" : ""} programmé${n > 1 ? "s" : ""}`,
       dry
         ? `Rien n'est publié (mode simulation). Comptes : ${accounts}.`
         : `Premier envoi à ${hhmm(first, config.tz)} sur ${accounts}. Tu peux encore annuler d'ici là.`,

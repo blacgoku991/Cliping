@@ -212,6 +212,9 @@ export function decide(input: DecisionInput): Decision {
     out.schedule.push({ ...r, reason: `meilleur clip disponible (score ${byId.get(r.clipId)?.score ?? "?"}), compte libre le plus tôt` });
   }
   if (inWindow.length > kept.length) out.notes.push(`Plafond global de ${c.globalDailyCap} sur 24 h : ${inWindow.length - kept.length} clip(s) attendront.`);
-  if (plan.length > inWindow.length) out.notes.push(`${plan.length - inWindow.length} clip(s) reportés : plus de créneau libre avant la fin de la plage horaire (écart et plafonds par compte).`);
+  if (plan.length > inWindow.length) {
+    const limit = c.window.from === c.window.to ? "dans les prochaines 24 h" : "avant la fin de la plage horaire";
+    out.notes.push(`${plan.length - inWindow.length} clip(s) reportés : plus de créneau libre ${limit} (écart et plafonds par compte).`);
+  }
   return out;
 }

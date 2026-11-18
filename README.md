@@ -83,6 +83,35 @@ Les deux plateformes demandent de créer une « application développeur » (gra
 - **Réglages par compte** (page Comptes) : visibilité par défaut, plafond de publications sur 24 heures glissantes, et un bouton **Tester la connexion** qui relit le profil du compte avec son accès enregistré (rien n'est publié).
 - **Planifier en lot** (Publications → Planifier en lot) : coche des clips approuvés et des comptes, choisis l'heure de départ, l'écart minimal entre deux publications d'un même compte et le décalage entre comptes. L'aperçu répartit **un clip différent par publication** (jamais la même vidéo sur deux comptes), du meilleur score au moins bon, sur le compte libre le plus tôt, en respectant l'écart et les plafonds — publications déjà programmées comprises. Tu peux changer le compte ou l'heure de chaque ligne ou en retirer ; les conflits sont signalés en direct, et le serveur revérifie tout avant d'enregistrer.
 
+## Être prévenu et laisser le pilote travailler
+
+Page **Pilote automatique** (onglets Pilote, Notifications, Journal).
+
+### Notifications
+
+Cliping te prévient quand un clip est prêt à valider, quand une publication échoue, quand un compte doit être reconnecté, quand le pilote a programmé quelque chose, et une fois par jour avec un résumé. Chaque type se coupe séparément ; des **heures de silence** retiennent tout jusqu'au matin, et pendant un live agité les alertes sont **regroupées** (la première part tout de suite, les suivantes partent ensemble au bout de 10 minutes par défaut : « 6 clips prêts à valider »).
+
+Trois canaux, gratuits :
+
+| Canal | Pour qui | À savoir |
+|---|---|---|
+| **Notifications de l'app** (Web Push) | iPhone (iOS 16.4 ou plus), Android, ordinateur | Sur iPhone, ça ne marche **que depuis l'app ajoutée à l'écran d'accueil** (Safari → Partager → Sur l'écran d'accueil), puis « Activer sur cet appareil ». Le site doit être en `https://`. Aucune configuration serveur : les clés VAPID sont générées et gardées en base. |
+| **ntfy** | iPhone et Android, sans installer l'app Cliping | Appli gratuite ntfy, abonnement à un sujet secret sur ntfy.sh. Utile si les notifications web ne passent pas. Un serveur ntfy perso doit être ajouté à `NOTIFY_EXTRA_HOSTS` (et, pour l'iPhone, configuré avec `upstream-base-url: "https://ntfy.sh"`). |
+| **Discord** | un salon de ton serveur | Webhook du salon (Paramètres du salon → Intégrations). |
+
+Le serveur n'envoie qu'à des hôtes connus : services de push d'Apple, Google, Mozilla et Microsoft, ntfy.sh, discord.com (et ce que l'administrateur ajoute à `NOTIFY_EXTRA_HOSTS`), en `https`, sans suivre de redirection.
+
+### Pilote automatique
+
+**Désactivé par défaut.** Des règles que tu actives si tu veux :
+
+- **approuver seul** les clips dont le score atteint un seuil ;
+- **programmer seul** les clips approuvés sur les comptes que tu coches, avec la même répartition que la planification en lot (un clip différent par publication, jamais la même vidéo sur deux comptes, écart et plafonds respectés, meilleurs clips d'abord).
+
+Garde-fous : liste des streamers autorisés, plafond global sur 24 h, plafond par compte, plage horaire, âge maximal d'un clip, et un **délai de grâce** (30 min par défaut) entre la programmation et l'envoi, pendant lequel tu es prévenu et peux annuler. Un compte à reconnecter est écarté (et repris tout seul après la reconnexion) ; un compte qui échoue deux fois d'affilée est mis en pause jusqu'à ce que tu le reprennes. Un clip que tu annules n'est jamais reprogrammé.
+
+Commence en **simulation** : le pilote décide comme s'il était aux commandes et note tout dans le **journal**, sans rien approuver ni publier. Le vrai mode demande de cocher que tu acceptes de publier sans relecture des extraits d'autres créateurs. **« Arrêter maintenant »** coupe le pilote et annule ses publications pas encore parties.
+
 ## Activer l'IA et les sous-titres
 
 Les deux sont facultatifs. Sans eux, les clips sortent avec un titre générique et sans sous-titres.
@@ -133,7 +162,8 @@ Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e
 - la capture de TikTok Live (plugin `tiktok` de streamlink 8.6, fragile car TikTok change souvent son site) et le téléchargement de vrais clips Twitch/Kick/TikTok/Shorts par yt-dlp (extracteurs présents dans la version installée, mais sites injoignables ici). L'import d'un clip court a été vérifié de bout en bout avec des fichiers servis localement ;
 - l'annuaire des lives Twitch (API Helix, jeton d'application) et Kick (API publique `api.kick.com/public/v1`) : écrits d'après leur documentation, testés uniquement contre un faux annuaire. Pour Kick, les noms exacts des paramètres de `/livestreams` (`category_id`, `language`, `sort`) n'ont pu être confirmés que par des bibliothèques tierces ;
 - « Tester la connexion » : vérifié contre les vrais serveurs de Google avec un jeton invalide (→ « reconnecte le compte ») ; TikTok injoignable ;
-- la construction des images Docker.
+- la construction des images Docker ;
+- la **réception réelle des notifications** sur un iPhone, Android ou ordinateur : l'envoi Web Push (chiffrement aes128gcm, en-tête VAPID) a été vérifié de bout en bout contre un faux service de push qui déchiffre le message avec les clés d'un faux abonné, mais les vrais services (Apple `web.push.apple.com`, Google, Mozilla) n'étaient pas joignables, et un navigateur sans écran ne peut pas s'abonner pour de vrai ; ntfy a été vérifié contre un faux serveur ntfy (publication JSON), pas contre ntfy.sh (injoignable) ; Discord n'a été vérifié que par la validation de l'adresse et le format du message, sans aucun envoi.
 
 Fais un essai complet avec un compte secondaire avant le jour J, et règle la sensibilité sur un vrai live : les seuils par défaut ont été calibrés sur des signaux de synthèse.
 
