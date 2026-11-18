@@ -56,6 +56,8 @@ export class Monitor {
   /** Captures lancées pour des chaînes du mode automatique → spectateurs (pour céder la place aux chaînes manuelles) */
   private readonly autoViewers = new Map<string, number>();
   private running = false;
+  /** Captures en cours de démarrage (place déjà réservée) */
+  private starting = 0;
   private stopped = false;
 
   get activeCount(): number {
@@ -103,27 +105,40 @@ export class Monitor {
       return;
     }
     if (!wanted) return;
-    if (this.recorders.size >= env.worker.maxRecordings && !streamer.autoFollowed) {
+    // Réservation synchrone d'une place : les vérifications tournent en parallèle, et sans elle
+    // deux chaînes pourraient prendre la même dernière place pendant les accès à la base.
+    const used = () => this.recorders.size + this.starting;
+    let victim: { id: string; rec: LiveRecorder } | null = null;
+    if (used() >= env.worker.maxRecordings && !streamer.autoFollowed) {
       // Les chaînes suivies à la main passent avant celles du mode automatique : on libère la place
       // de la capture automatique la moins regardée.
-      const victim = [...this.recorders.entries()]
+      const found = [...this.recorders.entries()]
         .filter(([id, r]) => this.autoViewers.has(id) && !r.done)
         .sort(([a], [b]) => (this.autoViewers.get(a) ?? 0) - (this.autoViewers.get(b) ?? 0))[0];
-      if (victim) {
-        const [victimId, rec] = victim;
-        rec.stop(`place laissée à ${streamer.displayName} (chaîne suivie à la main)`);
-        await rec.waitDone(60_000);
-        this.recorders.delete(victimId);
+      if (found) {
+        victim = { id: found[0], rec: found[1] };
+        this.recorders.delete(victim.id);
+        this.autoViewers.delete(victim.id);
       }
     }
-    if (this.recorders.size >= env.worker.maxRecordings) {
+    if (used() >= env.worker.maxRecordings) {
       await db.streamer.update({
         where: { id: streamer.id },
         data: { lastError: `En live, mais ${env.worker.maxRecordings} enregistrements tournent déjà (MAX_CONCURRENT_RECORDINGS)` },
       });
       return;
     }
-    await this.startRecording(streamer, status);
+    this.starting++;
+    try {
+      if (victim) {
+        log("monitor", `${victim.rec.target.streamer.login} (mode auto) laisse sa place à ${streamer.login} (chaîne suivie à la main)`);
+        victim.rec.stop(`place laissée à ${streamer.displayName} (chaîne suivie à la main)`);
+        await victim.rec.waitDone(60_000);
+      }
+      await this.startRecording(streamer, status);
+    } finally {
+      this.starting--;
+    }
   }
 
   private async startRecording(streamer: Streamer, status: LiveStatus): Promise<void> {

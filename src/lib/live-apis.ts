@@ -244,9 +244,14 @@ export function resetDirectoryCaches(): void {
  * Une plateforme en erreur n'empêche pas l'autre de répondre : ses erreurs sont renvoyées à part.
  */
 export async function topStreams(game: string, language: string, limit = 24): Promise<{ streams: DiscoveredStream[]; errors: string[] }> {
+  const friendly = (label: string) => (err: unknown): never => {
+    if (err instanceof DirectoryError) throw err;
+    const network = err instanceof TypeError || (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError"));
+    throw new DirectoryError(network ? `${label} injoignable depuis le serveur (réseau ou délai dépassé).` : `${label} : ${err instanceof Error ? err.message : String(err)}`);
+  };
   const jobs: Array<Promise<DiscoveredStream[]>> = [];
-  if (directoryConfigured("TWITCH")) jobs.push(twitchTopStreams(game, language, limit));
-  if (directoryConfigured("KICK")) jobs.push(kickTopStreams(game, language, limit));
+  if (directoryConfigured("TWITCH")) jobs.push(twitchTopStreams(game, language, limit).catch(friendly("Twitch")));
+  if (directoryConfigured("KICK")) jobs.push(kickTopStreams(game, language, limit).catch(friendly("Kick")));
   const settled = await Promise.allSettled(jobs);
   const streams: DiscoveredStream[] = [];
   const errors: string[] = [];

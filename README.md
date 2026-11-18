@@ -5,7 +5,7 @@ Cliping regarde les lives à ta place, repère les meilleurs moments, les monte 
 ```
  chaînes suivies ──▶ live détecté ──▶ enregistrement ──▶ détection des moments forts
  (Twitch, Kick,      (filtre par       (tampon glissant,    (volume + chat + action à l'écran)
-  YouTube)            jeu : GTA 6)      sans réencodage)               │
+  YouTube, TikTok)    jeu : GTA 6)      sans réencodage)               │
                                                                        ▼
  publication ◀── tu valides / retouches ◀── clip 9:16 monté : fond flouté, accroche,
  (multi-comptes,     dans l'interface        sous-titres mot à mot, crédit du streamer,
@@ -26,7 +26,14 @@ Ouvre `http://localhost:3000`, crée ton compte, ajoute tes streamers dans **Str
 
 Le filtre de jeu est pré-rempli sur « Grand Theft Auto VI » (« GTA 6 » et « GTA VI » sont compris de la même façon). Si une chaîne est en live sans être captée, sa carte affiche la catégorie réellement annoncée par la plateforme : recopie-la dans le filtre.
 
-Pour tester sans attendre un live, colle le lien d'un replay dans **Streamers → Importer un replay**.
+Pour tester sans attendre un live, colle le lien d'un replay dans **Streamers → Importer une vidéo**.
+
+## D'où viennent les clips
+
+- **Lives suivis** : Twitch, Kick, YouTube et **TikTok Live** (`tiktok.com/@pseudo`). Sur YouTube et TikTok, qui n'affichent pas de catégorie, le filtre de jeu est cherché dans le titre du live.
+- **Import d'une vidéo** (Streamers → Importer une vidéo) : colle le lien d'un **clip Twitch**, d'un **clip Kick**, d'une **vidéo ou d'un Short YouTube**, d'une **vidéo TikTok** (liens courts `vm.tiktok.com` compris), ou d'un replay. Une vidéo de 2 min 30 ou moins (`SHORT_VIDEO_MAX_SEC`) devient directement un clip vertical (une vidéo déjà verticale garde tout l'écran) ; au-delà, le bot y cherche les moments forts comme dans un replay.
+- **« En live maintenant »** (page Streamers) : les plus gros lives d'un jeu (GTA 6 par défaut) dans une langue, avec spectateurs, titre et miniature, et un bouton **Suivre**. Demande des identifiants d'application Twitch (`TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`, gratuits, voir `.env.example`) ; Kick en plus avec `KICK_CLIENT_ID` / `KICK_CLIENT_SECRET`.
+- **Mode automatique** : « suivre automatiquement les N plus gros lives de ce jeu dans cette langue ». Toutes les 2 minutes, le bot ajoute les nouveaux gros lives et retire ceux qui sortent du classement (mis en pause s'ils ont déjà des clips, pour garder le crédit). Il reste dans la limite de `MAX_CONCURRENT_RECORDINGS`, ne touche jamais aux chaînes ajoutées à la main, et leur cède la place : si une chaîne manuelle démarre un live alors que tout est pris, la capture automatique la moins regardée s'arrête. Une chaîne automatique retirée à la main n'est plus reprise ; « Garder » la transforme en chaîne manuelle.
 
 Une fois ton compte créé, mets `ALLOW_SIGNUP="false"` dans `.env` puis `docker compose up -d` si tu es le seul utilisateur.
 
@@ -71,6 +78,11 @@ Les deux plateformes demandent de créer une « application développeur » (gra
 - Le mode **Brouillon** (par défaut) envoie la vidéo dans les notifications de ton app TikTok : tu ajoutes un son si tu veux et tu postes. C'est le mode qui fonctionne sans audit, limité à 5 brouillons en attente par 24 h et par compte.
 - La **publication directe en public** exige que ton application ait passé l'audit TikTok. Avant ça, TikTok n'accepte que la visibilité « Moi uniquement », sur un compte privé.
 
+## Publier sur plusieurs comptes
+
+- **Réglages par compte** (page Comptes) : visibilité par défaut, plafond de publications sur 24 heures glissantes, et un bouton **Tester la connexion** qui relit le profil du compte avec son accès enregistré (rien n'est publié).
+- **Planifier en lot** (Publications → Planifier en lot) : coche des clips approuvés et des comptes, choisis l'heure de départ, l'écart minimal entre deux publications d'un même compte et le décalage entre comptes. L'aperçu répartit **un clip différent par publication** (jamais la même vidéo sur deux comptes), du meilleur score au moins bon, sur le compte libre le plus tôt, en respectant l'écart et les plafonds — publications déjà programmées comprises. Tu peux changer le compte ou l'heure de chaque ligne ou en retirer ; les conflits sont signalés en direct, et le serveur revérifie tout avant d'enregistrer.
+
 ## Activer l'IA et les sous-titres
 
 Les deux sont facultatifs. Sans eux, les clips sortent avec un titre générique et sans sous-titres.
@@ -92,7 +104,7 @@ Les écarts sont combinés et lissés sur 5 secondes (un simple coup de feu ne s
 
 Tout se règle dans **Réglages** : sensibilité, durées, nombre max de clips par heure, mise en page, police et couleur des sous-titres.
 
-Sur Kick et YouTube, le chat n'est pas lu : la détection repose sur le son et l'image, et sera donc un peu moins fine que sur Twitch.
+Sur Kick, YouTube et TikTok, le chat n'est pas lu : la détection repose sur le son et l'image, et sera donc un peu moins fine que sur Twitch. (Kick ne propose officiellement la lecture du chat que par webhooks vers une adresse publique ; le websocket utilisé par son site n'est pas documenté et peut changer sans prévenir, il n'a donc pas été retenu.)
 
 ## Ce qui a été vérifié, et ce qui ne l'a pas été
 
@@ -106,6 +118,9 @@ Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e
 - la capture de vrais lives Twitch, Kick et YouTube (elle repose sur `streamlink`, l'outil de référence, mais n'a pas pu être essayée ici) ;
 - les envois vers YouTube et TikTok : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
 - l'appel à Claude et à l'API de transcription ;
+- la capture de TikTok Live (plugin `tiktok` de streamlink 8.6, fragile car TikTok change souvent son site) et le téléchargement de vrais clips Twitch/Kick/TikTok/Shorts par yt-dlp (extracteurs présents dans la version installée, mais sites injoignables ici). L'import d'un clip court a été vérifié de bout en bout avec des fichiers servis localement ;
+- l'annuaire des lives Twitch (API Helix, jeton d'application) et Kick (API publique `api.kick.com/public/v1`) : écrits d'après leur documentation, testés uniquement contre un faux annuaire. Pour Kick, les noms exacts des paramètres de `/livestreams` (`category_id`, `language`, `sort`) n'ont pu être confirmés que par des bibliothèques tierces ;
+- « Tester la connexion » : vérifié contre les vrais serveurs de Google avec un jeton invalide (→ « reconnecte le compte ») ; TikTok injoignable ;
 - la construction des images Docker.
 
 Fais un essai complet avec un compte secondaire avant le jour J, et règle la sensibilité sur un vrai live : les seuils par défaut ont été calibrés sur des signaux de synthèse.
@@ -156,11 +171,13 @@ prisma/schema.prisma        modèle de données
 src/app/                    site Next.js (pages, actions serveur, routes OAuth et média)
 src/lib/                    partagé site + bot : base, sessions, chiffrement, file de tâches, plateformes
 src/lib/platforms/          adaptateurs YouTube et TikTok (OAuth, envoi, suivi)
+src/lib/schedule.ts         planification en lot (partagée entre l'aperçu et la validation serveur)
 src/worker/                 le bot
   monitor.ts                  qui est en live ?
   recorder.ts                 capture + analyse en continu + découpe
   analysis/                   mesures son/image et détecteur de moments forts
   chat/twitch.ts              lecture anonyme du chat
+  discovery.ts                « en live maintenant » et mode automatique (annuaire : src/lib/live-apis.ts)
   pipeline/clip.ts            transcription → titre → montage
   render/                     sous-titres ASS et montage ffmpeg
   vod.ts, publish.ts          import de replays, publication
@@ -171,7 +188,7 @@ tests/                      tests unitaires + banc d'essai de bout en bout
 
 - Paiement et abonnements (Stripe) : l'app est multi-utilisateurs, mais sans facturation.
 - Instagram Reels et autres plateformes : l'interface d'adaptateur (`src/lib/platforms/types.ts`) est prévue pour en ajouter.
-- Lecture du chat Kick et YouTube.
+- Lecture du chat Kick, YouTube et TikTok.
 - Stockage externe (S3/R2) : les vidéos sont sur le disque du serveur.
 
 ---
