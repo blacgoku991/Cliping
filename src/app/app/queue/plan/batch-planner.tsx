@@ -195,7 +195,7 @@ export function BatchPlanner({ clips, accounts }: { clips: PlannerClip[]; accoun
                     <X className="size-4" />
                   </button>
                   <Select value={r.accountId} onChange={(e) => update(i, { accountId: e.target.value })} aria-label="Compte" className="col-span-3 md:col-span-1">
-                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.displayName} ({a.platform === "YOUTUBE" ? "YouTube" : "TikTok"})</option>)}
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.displayName} ({a.platform === "YOUTUBE" ? "YouTube" : a.platform === "INSTAGRAM" ? "Instagram" : "TikTok"})</option>)}
                   </Select>
                   <Input
                     type="datetime-local"

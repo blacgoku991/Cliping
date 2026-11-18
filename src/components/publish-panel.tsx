@@ -52,7 +52,7 @@ export function PublishPanel({ clipId, accounts, platforms, disabled }: { clipId
   if (accounts.length === 0) {
     return (
       <p className="text-sm leading-relaxed text-muted">
-        Aucun compte connecté. <Link href="/app/accounts" className="font-semibold text-brand hover:underline">Connecte TikTok ou YouTube</Link> pour publier en un clic — ou télécharge le clip et poste-le à la main.
+        Aucun compte connecté. <Link href="/app/accounts" className="font-semibold text-brand hover:underline">Connecte TikTok, YouTube ou Instagram</Link> pour publier en un clic — ou télécharge le clip et poste-le à la main.
       </p>
     );
   }

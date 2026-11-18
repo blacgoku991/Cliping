@@ -69,7 +69,7 @@ export interface CoachState {
   drafts: Partial<Record<SocialPlatform, ProfileKit>>;
 }
 
-const platformSchema = z.enum(["TIKTOK", "YOUTUBE"]);
+const platformSchema = z.enum(["TIKTOK", "YOUTUBE", "INSTAGRAM"]);
 const strList = (max: number) => z.array(z.string()).max(max).catch([]);
 
 const profileKitSchema = z.object({

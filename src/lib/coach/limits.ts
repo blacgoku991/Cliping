@@ -41,6 +41,15 @@ export const LIMITS: Record<SocialPlatform, PlatformLimits> = {
     title: { max: 100, official: true },
     caption: { max: 5000, official: true, note: "description de la vidéo" },
   },
+  INSTAGRAM: {
+    label: "Instagram",
+    bio: { max: 150, official: false, note: "compteur affiché dans l'app (Modifier le profil → Bio)" },
+    displayName: { max: 30, official: false, note: "champ « Nom » du profil" },
+    username: { min: 1, max: 30, official: false, note: "lettres, chiffres, _ et ." },
+    // Seules les premières lignes d'une légende de Reel s'affichent sans « plus ».
+    title: { max: 125, official: false, note: "première ligne de la légende" },
+    caption: { max: 2200, official: false, note: "hashtags compris ; 5 hashtags maximum par publication" },
+  },
 };
 
 /** Nombre de caractères tel que l'affichent les applications (un emoji = 1, pas 2 unités UTF-16). */

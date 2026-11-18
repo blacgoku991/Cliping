@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { enqueue, PermanentError } from "@/lib/jobs";
 import { accessTokenFor, PLATFORMS, PlatformRejectedError, ReauthRequiredError } from "@/lib/platforms";
 import type { PublishResult } from "@/lib/platforms/types";
+import { signedMediaUrl } from "@/lib/public-media";
 import { clipFile, fileSize } from "@/lib/storage";
 import { log } from "./proc";
 
@@ -59,6 +60,7 @@ export async function publish(publicationId: string): Promise<void> {
       saveState: async (state) => {
         await db.publication.update({ where: { id: publicationId }, data: { uploadState: state as Prisma.InputJsonValue } });
       },
+      mediaUrl: () => signedMediaUrl(publicationId),
     });
     await applyResult(publicationId, pub.accountId, result);
     log("publish", `${adapter.label} · ${pub.account.displayName} : ${result.status === "PUBLISHED" ? "publié" : "en traitement"} ${result.url ?? ""}`);

@@ -51,6 +51,26 @@ export const env = {
     },
   },
 
+  instagram: {
+    /** Identifiant et clé secrète de l'application Instagram (Meta → produit Instagram → « Instagram API with Instagram Login ») */
+    get appId() {
+      return str("INSTAGRAM_APP_ID");
+    },
+    get appSecret() {
+      return str("INSTAGRAM_APP_SECRET");
+    },
+    get apiVersion() {
+      return str("INSTAGRAM_API_VERSION", "v24.0");
+    },
+    /** Remplaçables uniquement pour le banc d'essai (fausse API Instagram) */
+    get graphUrl() {
+      return str("INSTAGRAM_GRAPH_URL", "https://graph.instagram.com").replace(/\/+$/, "");
+    },
+    get oauthUrl() {
+      return str("INSTAGRAM_OAUTH_URL", "https://api.instagram.com").replace(/\/+$/, "");
+    },
+  },
+
   ai: {
     get apiKey() {
       return str("ANTHROPIC_API_KEY");
