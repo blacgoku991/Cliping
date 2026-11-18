@@ -92,6 +92,18 @@ Les écarts sont combinés et lissés sur 5 secondes (un simple coup de feu ne s
 
 Tout se règle dans **Réglages** : sensibilité, durées, nombre max de clips par heure, mise en page, police et couleur des sous-titres.
 
+## Comment le clip est monté
+
+Ce qui fait qu'un clip est regardé jusqu'au bout, ce sont les deux premières secondes et le rythme. Chaque technique ci-dessous est activée par défaut (sauf le carton de fin) et se coupe dans **Réglages → Montage**, ou clip par clip dans l'éditeur :
+
+- **Ouverture sur le moment fort** : le clip démarre sur un flash d'environ 1,5 s du pic, puis un éclair blanc ramène au début. Ignoré si le clip dure moins de 14 s ou si le pic arrive dans les 6 premières secondes.
+- **Temps morts coupés** : les silences entre deux phrases qui sont aussi des creux sonores sont retirés avant le moment fort (coupes sèches, jamais au milieu d'une phrase, jamais dans les 2,5 s qui précèdent le pic, 40 % de la mise en place au maximum). Son et sous-titres restent synchronisés.
+- **Bornes intelligentes** : à la création, le clip est calé sur un début de phrase, les premiers mots arrivent dans la première seconde, et la fin attend la chute de la phrase ou que la réaction retombe.
+- **Zoom d'impact** : +12 % progressif sur le gameplay au moment fort, puis retour.
+- **Sous-titres** : cinq styles (Classique, Impact, Encadré, Karaoké, Discret), avec les mots forts mis en valeur (choisis par l'IA, sinon exclamations, chiffres et mots criés).
+- **Barre de progression** fine en haut de l'image, et **carton de fin** optionnel (appel à s'abonner + crédit du streamer, désactivé par défaut : il casse la boucle de relecture).
+- **Trois accroches et trois titres** proposés par l'IA (ou des variantes neutres sans IA), à choisir d'un clic dans l'éditeur.
+
 Sur Kick et YouTube, le chat n'est pas lu : la détection repose sur le son et l'image, et sera donc un peu moins fine que sur Twitch.
 
 ## Ce qui a été vérifié, et ce qui ne l'a pas été
@@ -120,7 +132,7 @@ Fais un essai complet avec un compte secondaire avant le jour J, et règle la se
 
 - Un live capté en 1080p60 occupe environ 0,5 Go de disque (tampon glissant de 5 minutes) et une fraction de cœur.
 - Chaque clip conserve sa source (pour pouvoir le retoucher) : compte 50 à 100 Mo par clip. Les clips non publiés sont supprimés après 14 jours (réglable).
-- Un montage prend 10 à 15 secondes sur 4 cœurs.
+- Un montage prend 10 à 15 secondes sur 4 cœurs pour un clip de 20 à 30 s (mesuré entre 8,6 et 13,6 s, toutes options actives).
 - `MAX_CONCURRENT_RECORDINGS`, `JOB_CONCURRENCY` et la qualité de capture par chaîne (`720p60,best`) permettent d'ajuster à ton serveur.
 
 ## Développement
