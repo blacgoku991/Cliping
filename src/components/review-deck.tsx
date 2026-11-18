@@ -365,15 +365,15 @@ export function ReviewDeck({ initial, startId, processing, sort }: { initial: Re
 
             {error ? <p role="alert" className="mt-3 text-sm text-bad">{error}</p> : null}
 
-            <div className="mt-3 grid grid-cols-[1fr_auto_1fr] gap-2 lg:mt-6">
-              <button type="button" onClick={() => decide("REJECTED")} disabled={!!fly} className={buttonClass({ variant: "secondary", size: "lg" }, "h-14 border-bad/30 text-base hover:border-bad/60 hover:bg-bad/10")}>
-                <X className="size-5 text-bad" /> Écarter
+            <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2 lg:mt-6">
+              <button type="button" onClick={() => decide("REJECTED")} disabled={!!fly} className={buttonClass({ variant: "secondary", size: "lg" }, "h-14 min-w-0 gap-1.5 border-bad/30 px-3 text-base hover:border-bad/60 hover:bg-bad/10 sm:px-6")}>
+                <X className="size-5 shrink-0 text-bad max-[359px]:hidden" /> Écarter
               </button>
-              <Link href={`/app/clips/${current.id}`} className={buttonClass({ variant: "secondary", size: "lg" }, "h-14 px-4")} aria-label="Ouvrir pour publier" title="Ouvrir pour publier (Entrée)">
+              <Link href={`/app/clips/${current.id}`} className={buttonClass({ variant: "secondary", size: "lg" }, "h-14 px-3.5")} aria-label="Ouvrir pour publier" title="Ouvrir pour publier (Entrée)">
                 <Send className="size-5" />
               </Link>
-              <button type="button" onClick={() => decide("APPROVED")} disabled={!!fly} className={buttonClass({ variant: "primary", size: "lg" }, "h-14 text-base")}>
-                <Check className="size-5" /> Approuver
+              <button type="button" onClick={() => decide("APPROVED")} disabled={!!fly} className={buttonClass({ variant: "primary", size: "lg" }, "h-14 min-w-0 gap-1.5 px-3 text-base sm:px-6")}>
+                <Check className="size-5 shrink-0 max-[359px]:hidden" /> Approuver
               </button>
             </div>
             <p className="mt-2.5 text-center text-xs text-faint lg:hidden">Glisse le téléphone : à droite pour approuver, à gauche pour écarter.</p>
