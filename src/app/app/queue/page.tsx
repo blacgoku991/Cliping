@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ExternalLink, RotateCcw, Send, X } from "lucide-react";
+import { CalendarRange, ExternalLink, RotateCcw, Send, X } from "lucide-react";
 import { cancelPublication, retryPublication } from "@/app/actions/clips";
 import { SocialIcon } from "@/components/brand";
 import { AutoRefresh, LocalTime } from "@/components/client";
-import { Badge, Button, Card, EmptyState, LinkButton, PageHeader, type Tone } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, LinkButton, Notice, PageHeader, type Tone } from "@/components/ui";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 
@@ -19,8 +19,9 @@ const STATUS: Record<string, { label: string; tone: Tone }> = {
   CANCELED: { label: "Annulé", tone: "neutral" },
 };
 
-export default async function QueuePage() {
+export default async function QueuePage({ searchParams }: { searchParams: Promise<{ planned?: string }> }) {
   const user = await requireUser();
+  const planned = Math.max(0, Math.floor(Number((await searchParams).planned) || 0));
   const pubs = await db.publication.findMany({
     where: { userId: user.id },
     orderBy: [{ scheduledAt: "desc" }],
@@ -32,11 +33,16 @@ export default async function QueuePage() {
   return (
     <>
       {live ? <AutoRefresh seconds={6} /> : null}
-      <PageHeader title="Publications" subtitle="Tout ce qui est programmé, en cours d'envoi ou déjà en ligne sur tes comptes." />
+      <PageHeader
+        title="Publications"
+        subtitle="Tout ce qui est programmé, en cours d'envoi ou déjà en ligne sur tes comptes."
+        action={<LinkButton href="/app/queue/plan" variant="primary" size="sm"><CalendarRange className="size-3.5" /> Planifier en lot</LinkButton>}
+      />
+      {planned ? <Notice tone="ok" className="mb-5">{planned} publication{planned > 1 ? "s" : ""} programmée{planned > 1 ? "s" : ""}. Chacune part à son heure ; tu peux en annuler une ci-dessous.</Notice> : null}
       {pubs.length === 0 ? (
         <Card>
           <EmptyState icon={<Send className="size-6" />} title="Aucune publication" action={<LinkButton href="/app/clips" variant="primary">Voir mes clips</LinkButton>}>
-            Ouvre un clip, choisis tes comptes et clique sur « Publier » : il apparaîtra ici avec son statut.
+            Ouvre un clip et clique sur « Publier », ou planifie plusieurs clips d'un coup sur tes comptes avec « Planifier en lot ».
           </EmptyState>
         </Card>
       ) : (

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { allowedHostsLabel, isAllowedSourceUrl } from "@/lib/hosts";
+import { streamKey } from "@/lib/discovery";
+import { allowedHostsLabel, isAllowedSourceUrl, normalizeSourceUrl } from "@/lib/hosts";
 import { enqueue } from "@/lib/jobs";
 import { requireUser } from "@/lib/session";
 import { parseChannel, type SourcePlatformName } from "@/lib/sources";
@@ -15,8 +16,10 @@ export async function addStreamer(_prev: FormState, form: FormData): Promise<For
   const user = await requireUser();
   const input = String(form.get("channel") ?? "");
   const platform = String(form.get("platform") ?? "TWITCH") as SourcePlatformName;
-  const parsed = parseChannel(input, ["TWITCH", "KICK", "YOUTUBE"].includes(platform) ? platform : "TWITCH");
-  if (!parsed) return { error: "Chaîne non reconnue. Colle l'adresse de la chaîne (twitch.tv/pseudo, kick.com/pseudo, youtube.com/@pseudo)." };
+  const parsed = parseChannel(input, ["TWITCH", "KICK", "YOUTUBE", "TIKTOK"].includes(platform) ? platform : "TWITCH");
+  if (!parsed) {
+    return { error: "Chaîne non reconnue. Colle l'adresse de la chaîne (twitch.tv/pseudo, kick.com/pseudo, youtube.com/@pseudo, tiktok.com/@pseudo)." };
+  }
   if (parsed.platform === "OTHER" && !isAllowedSourceUrl(parsed.url)) {
     return { error: `Cette source n'est pas autorisée. Plateformes acceptées : ${allowedHostsLabel()}.` };
   }
@@ -26,6 +29,12 @@ export async function addStreamer(_prev: FormState, form: FormData): Promise<For
   const exists = await db.streamer.findUnique({
     where: { userId_platform_login: { userId: user.id, platform: parsed.platform, login: parsed.login } },
   });
+  if (exists?.autoFollowed) {
+    // Suivie par le mode automatique : elle passe en suivi manuel, le mode auto ne la retirera plus.
+    await db.streamer.update({ where: { id: exists.id }, data: { autoFollowed: false, autoViewers: null, enabled: true } });
+    revalidatePath("/app/streamers");
+    return { ok: `${exists.displayName} est maintenant suivie à la main (elle ne sera plus retirée automatiquement).` };
+  }
   if (exists) return { error: `${parsed.displayName} est déjà dans ta liste.` };
   await db.streamer.create({
     data: {
@@ -81,7 +90,27 @@ export async function toggleStreamer(form: FormData): Promise<void> {
 
 export async function deleteStreamer(form: FormData): Promise<void> {
   const user = await requireUser();
-  await db.streamer.deleteMany({ where: { id: String(form.get("id") ?? ""), userId: user.id } });
+  const s = await db.streamer.findFirst({ where: { id: String(form.get("id") ?? ""), userId: user.id } });
+  if (!s) return;
+  if (s.autoFollowed) {
+    // Retirée à la main : le mode automatique ne doit pas la reprendre au prochain passage.
+    const d = await db.discovery.findUnique({ where: { userId: user.id } });
+    const key = streamKey(s);
+    if (d && !d.excluded.includes(key)) {
+      await db.discovery.update({ where: { id: d.id }, data: { excluded: [...d.excluded, key].slice(-200) } });
+    }
+  }
+  await db.streamer.delete({ where: { id: s.id } });
+  revalidatePath("/app/streamers");
+}
+
+/** Chaîne ajoutée par le mode automatique que l'utilisateur veut garder : elle devient « manuelle ». */
+export async function keepStreamer(form: FormData): Promise<void> {
+  const user = await requireUser();
+  await db.streamer.updateMany({
+    where: { id: String(form.get("id") ?? ""), userId: user.id, autoFollowed: true },
+    data: { autoFollowed: false, autoViewers: null, enabled: true },
+  });
   revalidatePath("/app/streamers");
 }
 
@@ -95,8 +124,9 @@ function parseTime(raw: string): number | null {
 
 export async function importVod(_prev: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
-  const url = String(form.get("url") ?? "").trim();
-  if (!isAllowedSourceUrl(url)) return { error: `Lien non accepté. Colle un lien de VOD ou de vidéo ${allowedHostsLabel()}.` };
+  const raw = String(form.get("url") ?? "").trim();
+  if (!isAllowedSourceUrl(raw)) return { error: `Lien non accepté. Colle un lien de replay, de clip ou de vidéo ${allowedHostsLabel()}.` };
+  const url = normalizeSourceUrl(raw);
   const start = parseTime(String(form.get("start") ?? ""));
   const end = parseTime(String(form.get("end") ?? ""));
   if (Number.isNaN(start) || Number.isNaN(end)) return { error: "Format d'heure invalide. Utilise h:mm:ss ou mm:ss (ex. 1:23:45)." };
@@ -120,7 +150,9 @@ export async function importVod(_prev: FormState, form: FormData): Promise<FormS
   });
   await enqueue("vod.import", { recordingId: recording.id }, { maxAttempts: 2 });
   revalidatePath("/app/streamers");
-  return { ok: "Import lancé : les clips apparaîtront dans « Clips » dès qu'ils sont montés." };
+  return {
+    ok: "Import lancé. Une vidéo courte (clip, Short, TikTok) devient directement un clip ; un replay est analysé pour en extraire les moments forts. Résultat dans « Clips ».",
+  };
 }
 
 export async function deleteRecording(form: FormData): Promise<void> {

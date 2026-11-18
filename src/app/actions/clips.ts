@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { enqueue } from "@/lib/jobs";
 import { PLATFORMS } from "@/lib/platforms";
 import type { Prisma } from "@prisma/client";
+import { ACTIVE_PUB, planAccountsFor } from "@/lib/batch";
+import { checkPlan, type PlanRow } from "@/lib/schedule";
 import { requireUser } from "@/lib/session";
 import { CAPTION_STYLE_KEYS, effectiveEdit, parseSettings, type ClipEdit } from "@/lib/settings";
 import { clipDir, removeDir } from "@/lib/storage";
@@ -141,10 +143,21 @@ export async function publishClip(_prev: FormState, form: FormData): Promise<For
   const targets = accounts.filter((a) => !skip.has(a.id));
   if (targets.length === 0) return { error: "Ce clip est déjà publié ou programmé sur ces comptes." };
 
+  // Plafond sur 24 h glissantes réglé sur le compte (page « Comptes »).
+  const capped = await planAccountsFor(user.id);
+  for (const account of targets) {
+    const plan = capped.find((p) => p.account.id === account.id)?.plan;
+    if (!plan?.dailyCap) continue;
+    const issues = checkPlan([{ clipId: id, accountId: account.id, at: scheduledAt.getTime() }], [plan], { gapMin: 0, now: Date.now() });
+    if (issues.length) return { error: `« ${account.displayName} » atteindrait son plafond de ${plan.dailyCap} publications sur 24 h. Programme plus tard ou change le plafond dans « Comptes ».` };
+  }
+
   for (const account of targets) {
     const adapter = PLATFORMS[account.platform];
-    const wanted = String(form.get(`privacy_${account.platform}`) ?? adapter.defaultPrivacy);
-    const privacy = adapter.privacyOptions.some((o) => o.value === wanted) ? wanted : adapter.defaultPrivacy;
+    // Vide = « selon le compte » : visibilité par défaut du compte, sinon celle de la plateforme.
+    const accountDefault = account.defaultPrivacy && adapter.privacyOptions.some((o) => o.value === account.defaultPrivacy) ? account.defaultPrivacy : adapter.defaultPrivacy;
+    const wanted = String(form.get(`privacy_${account.platform}`) ?? "") || accountDefault;
+    const privacy = adapter.privacyOptions.some((o) => o.value === wanted) ? wanted : accountDefault;
     const pub = await db.publication.create({
       data: { userId: user.id, clipId: id, accountId: account.id, title: clip.title, description: clip.description, privacy, scheduledAt },
     });
@@ -172,4 +185,62 @@ export async function retryPublication(form: FormData): Promise<void> {
   });
   if (res.count) await enqueue("publish", { publicationId: id }, { maxAttempts: 3 });
   revalidatePath("/app/queue");
+}
+
+/**
+ * Valide et enregistre un planning en lot : un clip différent par publication, réparti sur les comptes.
+ * Le planning arrive du navigateur (aperçu retouché) ; il est entièrement revérifié ici.
+ */
+export async function scheduleBatch(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const gapMin = Math.round(Number(form.get("gapMin") ?? 0));
+  if (!Number.isFinite(gapMin) || gapMin < 0 || gapMin > 7 * 24 * 60) return { error: "Écart minimal invalide." };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(String(form.get("plan") ?? "[]"));
+  } catch {
+    return { error: "Planning illisible : recalcule-le." };
+  }
+  if (!Array.isArray(raw) || raw.length > 200) return { error: "Planning invalide (200 publications max par lot)." };
+  const rows: PlanRow[] = raw.map((r: { clipId?: unknown; accountId?: unknown; at?: unknown }) => ({
+    clipId: String(r?.clipId ?? ""),
+    accountId: String(r?.accountId ?? ""),
+    at: Number(r?.at),
+  }));
+
+  const planAccounts = await planAccountsFor(user.id);
+  const issues = checkPlan(rows, planAccounts.map((p) => p.plan), { gapMin, now: Date.now() });
+  if (issues.length) {
+    const first = issues[0]!;
+    return { error: `${first.row !== null ? `Ligne ${first.row + 1} : ` : ""}${first.message}${issues.length > 1 ? ` (+${issues.length - 1} autre${issues.length > 2 ? "s" : ""} problème${issues.length > 2 ? "s" : ""})` : ""}` };
+  }
+
+  const clips = await db.clip.findMany({
+    where: { id: { in: rows.map((r) => r.clipId) }, userId: user.id },
+    include: { publications: { where: { status: { in: [...ACTIVE_PUB] } }, select: { id: true } } },
+  });
+  const clipById = new Map(clips.map((c) => [c.id, c]));
+  for (const [i, r] of rows.entries()) {
+    const c = clipById.get(r.clipId);
+    if (!c) return { error: `Ligne ${i + 1} : clip introuvable.` };
+    if (!c.hasFinal || c.status === "PROCESSING") return { error: `Ligne ${i + 1} : « ${c.title} » n'est pas monté.` };
+    if (c.publications.length) return { error: `Ligne ${i + 1} : « ${c.title} » est déjà publié ou programmé sur un compte.` };
+  }
+
+  const accountById = new Map(planAccounts.map((p) => [p.account.id, p.account]));
+  for (const r of rows) {
+    const clip = clipById.get(r.clipId)!;
+    const account = accountById.get(r.accountId)!;
+    const adapter = PLATFORMS[account.platform];
+    const privacy = account.defaultPrivacy && adapter.privacyOptions.some((o) => o.value === account.defaultPrivacy) ? account.defaultPrivacy : adapter.defaultPrivacy;
+    const scheduledAt = new Date(Math.max(r.at, Date.now()));
+    const pub = await db.publication.create({
+      data: { userId: user.id, clipId: clip.id, accountId: account.id, title: clip.title, description: clip.description, privacy, scheduledAt },
+    });
+    await enqueue("publish", { publicationId: pub.id }, { runAt: scheduledAt, maxAttempts: 3 });
+    if (clip.status === "READY") await db.clip.update({ where: { id: clip.id }, data: { status: "APPROVED" } });
+  }
+  revalidatePath("/app/queue");
+  revalidatePath("/app/clips");
+  redirect(`/app/queue?planned=${rows.length}`);
 }

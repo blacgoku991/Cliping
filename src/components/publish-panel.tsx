@@ -81,7 +81,8 @@ export function PublishPanel({ clipId, accounts, platforms, disabled }: { clipId
       {usedPlatforms.map((p) => (
         <label key={p.id} className="flex items-center justify-between gap-3 text-sm">
           <span className="text-muted">Visibilité {p.label}</span>
-          <Select name={`privacy_${p.id}`} defaultValue={p.defaultPrivacy} className="w-auto max-w-[60%]">
+          <Select name={`privacy_${p.id}`} defaultValue="" className="w-auto max-w-[60%]">
+            <option value="">Selon chaque compte</option>
             {p.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </label>

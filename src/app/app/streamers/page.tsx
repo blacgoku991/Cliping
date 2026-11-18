@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
-import { Download, Radio, Settings2, Trash2 } from "lucide-react";
-import { addStreamer, deleteRecording, deleteStreamer, importVod, toggleStreamer, updateStreamer } from "@/app/actions/streamers";
+import { Download, Eye, Radio, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { addStreamer, deleteRecording, deleteStreamer, importVod, keepStreamer, toggleStreamer, updateStreamer } from "@/app/actions/streamers";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { SourceIcon } from "@/components/brand";
 import { AutoRefresh, ConfirmButton } from "@/components/client";
 import { Badge, Button, Card, CardHeader, EmptyState, Field, Input, LiveBadge, PageHeader, Select, type Tone } from "@/components/ui";
 import { db } from "@/lib/db";
+import { compactViewers, streamKey } from "@/lib/discovery";
 import { ago, duration } from "@/lib/format";
 import { allowedHostsLabel } from "@/lib/hosts";
 import { requireUser } from "@/lib/session";
+import { SOURCE_PLATFORMS } from "@/lib/sources";
+import { LiveNow } from "./live-now";
 
 export const metadata: Metadata = { title: "Streamers" };
 
@@ -35,6 +38,7 @@ export default async function StreamersPage() {
     }),
   ]);
   const importing = imports.some((r) => r.status === "PENDING" || r.status === "PROCESSING");
+  const followed = new Map(streamers.map((s) => [streamKey(s), { auto: s.autoFollowed }]));
 
   return (
     <>
@@ -45,21 +49,21 @@ export default async function StreamersPage() {
       />
 
       <Card className="mb-6">
-        <CardHeader title="Ajouter une chaîne" hint="Colle le lien de la chaîne Twitch, Kick ou YouTube (ou juste le pseudo)." />
+        <CardHeader title="Ajouter une chaîne" hint="Colle le lien de la chaîne Twitch, Kick, YouTube ou TikTok (ou juste le pseudo)." />
         <ActionForm action={addStreamer} resetOnOk className="grid gap-3 p-5 sm:grid-cols-[1fr_140px] lg:grid-cols-[1.3fr_140px_1fr_auto]" messageClassName="sm:col-span-2 lg:col-span-4">
           <Input name="channel" placeholder="twitch.tv/pseudo" required aria-label="Lien ou pseudo de la chaîne" autoComplete="off" />
           <Select name="platform" aria-label="Plateforme (si tu donnes juste un pseudo)" defaultValue="TWITCH">
-            <option value="TWITCH">Twitch</option>
-            <option value="KICK">Kick</option>
-            <option value="YOUTUBE">YouTube</option>
+            {SOURCE_PLATFORMS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </Select>
           <Input name="gameFilter" defaultValue="Grand Theft Auto VI" placeholder="Jeu (vide = tous les lives)" aria-label="Filtre de jeu" className="sm:col-span-2 lg:col-span-1" />
           <SubmitButton variant="primary" pendingLabel="Ajout…" className="sm:col-span-2 lg:col-span-1">Ajouter</SubmitButton>
         </ActionForm>
         <p className="border-t border-line px-5 py-3 text-xs leading-relaxed text-faint">
-          Le filtre de jeu correspond à la catégorie affichée sur Twitch ou Kick (« GTA 6 », « GTA VI » et « Grand Theft Auto VI » sont équivalents ; plusieurs jeux possibles, séparés par des virgules). Sur YouTube, il est cherché dans le titre du live. Si une chaîne est en live sans être captée, sa carte t&apos;indique la catégorie exacte à recopier.
+          Le filtre de jeu correspond à la catégorie affichée sur Twitch ou Kick (« GTA 6 », « GTA VI » et « Grand Theft Auto VI » sont équivalents ; plusieurs jeux possibles, séparés par des virgules). Sur YouTube et TikTok Live (qui n&apos;affichent pas de catégorie), il est cherché dans le titre du live. Si une chaîne est en live sans être captée, sa carte t&apos;indique la catégorie exacte à recopier.
         </p>
       </Card>
+
+      <LiveNow userId={user.id} followed={followed} />
 
       {streamers.length === 0 ? (
         <Card>
@@ -82,7 +86,12 @@ export default async function StreamersPage() {
                         <a href={s.url.replace(/\/live$/, "")} target="_blank" rel="noreferrer" className="truncate font-semibold hover:underline">{s.displayName}</a>
                         {s.isLive ? <LiveBadge /> : null}
                         {recording ? <Badge tone="brand">Capture · {duration(recording.durationSec)}</Badge> : null}
-                        {!s.enabled ? <Badge>En pause</Badge> : null}
+                        {s.autoFollowed ? (
+                          <Badge tone="violet" title="Ajoutée par le mode automatique : retirée quand elle sort du classement">
+                            <Sparkles className="size-3" /> Auto{s.autoViewers !== null ? <> · <Eye className="size-3" /> {compactViewers(s.autoViewers)}</> : null}
+                          </Badge>
+                        ) : null}
+                        {!s.enabled ? <Badge>{s.autoFollowed ? "Sortie du classement" : "En pause"}</Badge> : null}
                       </div>
                       <p className="mt-0.5 truncate text-xs text-muted">
                         {s.isLive
@@ -101,13 +110,20 @@ export default async function StreamersPage() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-faint">
                     <span className="tabular-nums">{s._count.clips} clip{s._count.clips > 1 ? "s" : ""}</span>
-                    <form action={toggleStreamer}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <Button type="submit" size="sm">{s.enabled ? "Mettre en pause" : "Réactiver"}</Button>
-                    </form>
+                    {s.autoFollowed ? (
+                      <form action={keepStreamer}>
+                        <input type="hidden" name="id" value={s.id} />
+                        <Button type="submit" size="sm" title="La suivre à la main : le mode automatique ne la retirera plus">Garder</Button>
+                      </form>
+                    ) : (
+                      <form action={toggleStreamer}>
+                        <input type="hidden" name="id" value={s.id} />
+                        <Button type="submit" size="sm">{s.enabled ? "Mettre en pause" : "Réactiver"}</Button>
+                      </form>
+                    )}
                     <form action={deleteStreamer}>
                       <input type="hidden" name="id" value={s.id} />
-                      <ConfirmButton size="sm" variant="ghost" message={`Retirer ${s.displayName} ? Les clips déjà créés sont conservés.`} aria-label={`Retirer ${s.displayName}`}>
+                      <ConfirmButton size="sm" variant="ghost" message={s.autoFollowed ? `Retirer ${s.displayName} ? Le mode automatique ne la reprendra plus. Les clips déjà créés sont conservés.` : `Retirer ${s.displayName} ? Les clips déjà créés sont conservés.`} aria-label={`Retirer ${s.displayName}`}>
                         <Trash2 className="size-3.5" />
                       </ConfirmButton>
                     </form>
@@ -154,9 +170,12 @@ export default async function StreamersPage() {
       )}
 
       <Card className="mt-10">
-        <CardHeader title="Importer un replay" hint={`Colle le lien d'une VOD ou d'une vidéo (${allowedHostsLabel()}) : le bot y cherche les meilleurs moments. Pratique pour tester sans attendre un live.`} />
+        <CardHeader
+          title="Importer une vidéo"
+          hint={`Colle le lien d'un clip, d'un Short, d'une vidéo TikTok ou d'un replay (${allowedHostsLabel()}). Une vidéo courte (2 min 30 ou moins) devient directement un clip vertical ; un replay est analysé pour en extraire les meilleurs moments.`}
+        />
         <ActionForm action={importVod} resetOnOk className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto]" messageClassName="sm:col-span-2 lg:col-span-5">
-          <Input name="url" type="url" placeholder="https://www.twitch.tv/videos/…" required aria-label="Lien du replay" className="sm:col-span-2 lg:col-span-1" />
+          <Input name="url" type="url" placeholder="https://clips.twitch.tv/… ou youtube.com/shorts/…" required aria-label="Lien du clip ou du replay" className="sm:col-span-2 lg:col-span-1" />
           <Input name="start" placeholder="Début (1:23:45)" aria-label="Début de la plage, facultatif" />
           <Input name="end" placeholder="Fin (2:00:00)" aria-label="Fin de la plage, facultatif" />
           <Input name="maxClips" type="number" min={1} max={50} placeholder="Nb de clips max" aria-label="Nombre maximum de clips, facultatif" />
@@ -173,7 +192,9 @@ export default async function StreamersPage() {
                     <Badge tone={st.tone}>{st.label}{running ? ` · ${Math.round(r.progress * 100)} %` : ""}</Badge>
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.title || r.sourceUrl}</span>
                     <span className="text-xs text-faint">
-                      {r.status === "DONE" ? `${duration(r.durationSec)} analysées · ${r._count.clips} clip${r._count.clips > 1 ? "s" : ""} · ` : ""}{ago(r.startedAt)}
+                      {r.status === "DONE" && (r.options as { kind?: string } | null)?.kind === "clip"
+                        ? `Clip importé tel quel · ${duration(r.durationSec)} · `
+                        : r.status === "DONE" ? `${duration(r.durationSec)} analysées · ${r._count.clips} clip${r._count.clips > 1 ? "s" : ""} · ` : ""}{ago(r.startedAt)}
                     </span>
                     {!running ? (
                       <form action={deleteRecording}>

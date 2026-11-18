@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { accessTokenFor, PLATFORMS, ReauthRequiredError } from "@/lib/platforms";
 import { requireUser } from "@/lib/session";
 import { settingsSchema } from "@/lib/settings";
 import type { FormState } from "./auth";
@@ -54,4 +55,53 @@ export async function disconnectAccount(form: FormData): Promise<void> {
   const user = await requireUser();
   await db.socialAccount.deleteMany({ where: { id: String(form.get("id") ?? ""), userId: user.id } });
   revalidatePath("/app/accounts");
+}
+
+/** Réglages de publication propres à un compte : visibilité par défaut et plafond quotidien. */
+export async function updateAccountSettings(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const account = await db.socialAccount.findFirst({ where: { id: String(form.get("id") ?? ""), userId: user.id } });
+  if (!account) return { error: "Compte introuvable." };
+  const adapter = PLATFORMS[account.platform];
+  const privacy = String(form.get("defaultPrivacy") ?? "");
+  if (privacy && !adapter.privacyOptions.some((o) => o.value === privacy)) return { error: "Visibilité inconnue pour cette plateforme." };
+  const capRaw = String(form.get("dailyCap") ?? "").trim();
+  const cap = capRaw === "" ? null : Math.round(Number(capRaw));
+  if (cap !== null && (!Number.isFinite(cap) || cap < 1 || cap > 50)) return { error: "Plafond : entre 1 et 50 publications par 24 h (ou vide pour aucun plafond)." };
+  await db.socialAccount.update({ where: { id: account.id }, data: { defaultPrivacy: privacy || null, dailyCap: cap } });
+  revalidatePath("/app/accounts");
+  return { ok: "Réglages du compte enregistrés." };
+}
+
+/** Vérifie que le jeton du compte fonctionne encore (rafraîchi si besoin) en relisant son profil. */
+export async function testAccount(_prev: FormState, form: FormData): Promise<FormState> {
+  const user = await requireUser();
+  const account = await db.socialAccount.findFirst({ where: { id: String(form.get("id") ?? ""), userId: user.id } });
+  if (!account) return { error: "Compte introuvable." };
+  const adapter = PLATFORMS[account.platform];
+  if (!adapter.configured()) return { error: `${adapter.label} n'est pas configuré sur ce serveur (${adapter.requiredEnv.join(", ")}).` };
+  try {
+    const token = await accessTokenFor(account);
+    const profile = await adapter.fetchProfile(token);
+    await db.socialAccount.update({
+      where: { id: account.id },
+      data: {
+        valid: true,
+        checkedAt: new Date(),
+        displayName: profile.displayName || account.displayName,
+        avatarUrl: profile.avatarUrl ?? account.avatarUrl,
+        handle: profile.handle ?? account.handle,
+      },
+    });
+    revalidatePath("/app/accounts");
+    return { ok: `Connexion OK : ${adapter.label} répond pour « ${profile.displayName || account.displayName} ».` };
+  } catch (err) {
+    if (err instanceof ReauthRequiredError) {
+      await db.socialAccount.update({ where: { id: account.id }, data: { valid: false } }).catch(() => {});
+      revalidatePath("/app/accounts");
+      return { error: err.message };
+    }
+    const network = err instanceof TypeError || (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError"));
+    return { error: network ? `${adapter.label} est injoignable depuis le serveur (réseau ou délai dépassé).` : `${adapter.label} : ${err instanceof Error ? err.message : String(err)}` };
+  }
 }

@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { claimJob, completeJob, failJob, requeueStaleJobs, type JobPayloads, type JobType } from "@/lib/jobs";
 import { ensureDir } from "@/lib/storage";
 import { cleanup } from "./cleanup";
+import { DISCOVERY_INTERVAL_SEC, discoveryEnabled, refreshDiscovery } from "./discovery";
 import { Monitor, resetStaleState } from "./monitor";
 import { processClip, renderClip } from "./pipeline/clip";
 import { log, run } from "./proc";
@@ -27,6 +28,7 @@ const handlers: Handlers = {
   publish: (p) => publish(p.publicationId),
   "publish.check": (p) => checkPublication(p.publicationId),
   cleanup: () => cleanup(),
+  "discovery.refresh": (p) => refreshDiscovery(p.userId),
 };
 
 async function onFailure(job: Job, error: unknown, willRetry: boolean): Promise<void> {
@@ -87,6 +89,20 @@ async function monitorLoop(): Promise<void> {
   }
 }
 
+/** « En live maintenant » et mode automatique : classement rafraîchi régulièrement. */
+async function discoveryLoop(): Promise<void> {
+  if (!discoveryEnabled()) {
+    log("discovery", "pas d'identifiants Twitch/Kick d'application : la découverte des lives est désactivée");
+    return;
+  }
+  // Laisse au moniteur le temps de reprendre les captures en cours avant de compter les places libres.
+  await sleep(Math.min(30, env.worker.monitorIntervalSec + 5) * 1000);
+  while (!shuttingDown) {
+    await refreshDiscovery().catch((err) => log("discovery", `erreur : ${err instanceof Error ? err.message : err}`));
+    await sleep(DISCOVERY_INTERVAL_SEC * 1000);
+  }
+}
+
 async function heartbeatLoop(): Promise<void> {
   let lastCleanup = 0;
   while (!shuttingDown) {
@@ -97,6 +113,7 @@ async function heartbeatLoop(): Promise<void> {
       jobs: running,
       ai: !!env.ai.apiKey,
       transcription: transcriptionEnabled(),
+      discovery: discoveryEnabled(),
     };
     await db.keyValue
       .upsert({ where: { key: "worker.heartbeat" }, update: { value }, create: { key: "worker.heartbeat", value } })
@@ -164,7 +181,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => stop("SIGTERM"));
   process.on("SIGINT", () => stop("SIGINT"));
 
-  await Promise.all([jobLoop(), monitorLoop(), heartbeatLoop()]);
+  await Promise.all([jobLoop(), monitorLoop(), heartbeatLoop(), discoveryLoop()]);
 }
 
 main().catch((err) => {

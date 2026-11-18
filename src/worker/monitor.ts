@@ -53,7 +53,11 @@ async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<v
 /** Surveille les chaînes suivies et démarre/arrête les enregistrements. */
 export class Monitor {
   private readonly recorders = new Map<string, LiveRecorder>();
+  /** Captures lancées pour des chaînes du mode automatique → spectateurs (pour céder la place aux chaînes manuelles) */
+  private readonly autoViewers = new Map<string, number>();
   private running = false;
+  /** Captures en cours de démarrage (place déjà réservée) */
+  private starting = 0;
   private stopped = false;
 
   get activeCount(): number {
@@ -95,19 +99,46 @@ export class Monitor {
     if (this.stopped) return;
 
     const wanted = status.live && matchesGameFilter(streamer.gameFilter, status.category, status.title);
+    if (recorder && !recorder.done && this.autoViewers.has(streamer.id)) this.autoViewers.set(streamer.id, streamer.autoViewers ?? 0);
     if (recorder && !recorder.done) {
       if (status.live && !wanted) recorder.stop("le streamer a changé de jeu");
       return;
     }
     if (!wanted) return;
-    if (this.recorders.size >= env.worker.maxRecordings) {
+    // Réservation synchrone d'une place : les vérifications tournent en parallèle, et sans elle
+    // deux chaînes pourraient prendre la même dernière place pendant les accès à la base.
+    const used = () => this.recorders.size + this.starting;
+    let victim: { id: string; rec: LiveRecorder } | null = null;
+    if (used() >= env.worker.maxRecordings && !streamer.autoFollowed) {
+      // Les chaînes suivies à la main passent avant celles du mode automatique : on libère la place
+      // de la capture automatique la moins regardée.
+      const found = [...this.recorders.entries()]
+        .filter(([id, r]) => this.autoViewers.has(id) && !r.done)
+        .sort(([a], [b]) => (this.autoViewers.get(a) ?? 0) - (this.autoViewers.get(b) ?? 0))[0];
+      if (found) {
+        victim = { id: found[0], rec: found[1] };
+        this.recorders.delete(victim.id);
+        this.autoViewers.delete(victim.id);
+      }
+    }
+    if (used() >= env.worker.maxRecordings) {
       await db.streamer.update({
         where: { id: streamer.id },
         data: { lastError: `En live, mais ${env.worker.maxRecordings} enregistrements tournent déjà (MAX_CONCURRENT_RECORDINGS)` },
       });
       return;
     }
-    await this.startRecording(streamer, status);
+    this.starting++;
+    try {
+      if (victim) {
+        log("monitor", `${victim.rec.target.streamer.login} (mode auto) laisse sa place à ${streamer.login} (chaîne suivie à la main)`);
+        victim.rec.stop(`place laissée à ${streamer.displayName} (chaîne suivie à la main)`);
+        await victim.rec.waitDone(60_000);
+      }
+      await this.startRecording(streamer, status);
+    } finally {
+      this.starting--;
+    }
   }
 
   private async startRecording(streamer: Streamer, status: LiveStatus): Promise<void> {
@@ -132,9 +163,14 @@ export class Monitor {
       settings: parseSettings(user.settings),
     });
     rec.onEnd = (r) => {
-      if (this.recorders.get(streamer.id) === r) this.recorders.delete(streamer.id);
+      if (this.recorders.get(streamer.id) === r) {
+        this.recorders.delete(streamer.id);
+        this.autoViewers.delete(streamer.id);
+      }
     };
     this.recorders.set(streamer.id, rec);
+    if (streamer.autoFollowed) this.autoViewers.set(streamer.id, streamer.autoViewers ?? 0);
+    else this.autoViewers.delete(streamer.id);
     try {
       await rec.start();
     } catch (err) {
