@@ -97,19 +97,35 @@ export function creditLabel(platform: SourcePlatformName, login: string, display
   return displayName;
 }
 
-/** Vrai si la catégorie du live correspond au filtre (liste séparée par des virgules, insensible à la casse). */
+const ROMAN: Record<string, string> = { ii: "2", iii: "3", iv: "4", v: "5", vi: "6", vii: "7", viii: "8" };
+
+/**
+ * Forme canonique d'un nom de jeu, pour que « GTA 6 », « gta vi » et « Grand Theft Auto VI »
+ * désignent la même chose (et restent distincts de « Grand Theft Auto V »).
+ */
+export function canonicalGame(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/grand theft auto/g, "gta")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(" ")
+    .map((token) => ROMAN[token] ?? token)
+    .join(" ");
+}
+
+/** Vrai si la catégorie du live correspond au filtre (liste séparée par des virgules). */
 export function matchesGameFilter(filter: string, category: string | null | undefined, title?: string | null): boolean {
-  const wanted = filter
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const wanted = filter.split(",").map(canonicalGame).filter(Boolean);
   if (wanted.length === 0) return true;
-  const cat = (category ?? "").trim().toLowerCase();
+  const cat = canonicalGame(category ?? "");
   // Correspondance exacte sur la catégorie : « Grand Theft Auto VI » ne doit pas matcher « Grand Theft Auto V ».
-  if (cat) return wanted.some((w) => cat === w);
-  // Plateformes sans catégorie (YouTube) : on se rabat sur le titre du live.
-  const t = (title ?? "").toLowerCase();
-  return wanted.some((w) => t.includes(w));
+  if (cat) return wanted.includes(cat);
+  // Plateformes sans catégorie (YouTube) : on cherche le jeu, mot pour mot, dans le titre du live.
+  const t = ` ${canonicalGame(title ?? "")} `;
+  return wanted.some((w) => t.includes(` ${w} `));
 }
 
 export function isHttpUrl(input: string): boolean {

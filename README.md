@@ -24,6 +24,8 @@ docker compose up -d --build
 
 Ouvre `http://localhost:3000`, crée ton compte, ajoute tes streamers dans **Streamers**. C'est tout : dès qu'un de leurs lives démarre sur le bon jeu, les clips arrivent dans **Clips**.
 
+Le filtre de jeu est pré-rempli sur « Grand Theft Auto VI » (« GTA 6 » et « GTA VI » sont compris de la même façon). Si une chaîne est en live sans être captée, sa carte affiche la catégorie réellement annoncée par la plateforme : recopie-la dans le filtre.
+
 Pour tester sans attendre un live, colle le lien d'un replay dans **Streamers → Importer un replay**.
 
 Une fois ton compte créé, mets `ALLOW_SIGNUP="false"` dans `.env` puis `docker compose up -d` si tu es le seul utilisateur.
@@ -102,7 +104,7 @@ Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e
 **Non vérifié en conditions réelles**, faute d'accès depuis l'environnement de développement :
 
 - la capture de vrais lives Twitch, Kick et YouTube (elle repose sur `streamlink`, l'outil de référence, mais n'a pas pu être essayée ici) ;
-- les envois vers YouTube et TikTok : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée ;
+- les envois vers YouTube et TikTok : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
 - l'appel à Claude et à l'API de transcription ;
 - la construction des images Docker.
 

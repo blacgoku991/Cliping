@@ -147,5 +147,14 @@ describe("sources", () => {
     expect(matchesGameFilter("Grand Theft Auto VI", "Grand Theft Auto V")).toBe(false);
     expect(matchesGameFilter("", "Just Chatting")).toBe(true);
     expect(matchesGameFilter("gta 6, gta vi", null, "ON DÉCOUVRE GTA 6 !!")).toBe(true);
+    // Écritures équivalentes du même jeu
+    expect(matchesGameFilter("GTA 6", "Grand Theft Auto VI")).toBe(true);
+    expect(matchesGameFilter("grand theft auto 6", "Grand Theft Auto VI")).toBe(true);
+    expect(matchesGameFilter("GTA 6", "Grand Theft Auto V")).toBe(false);
+    expect(matchesGameFilter("GTA 5", "Grand Theft Auto VI")).toBe(false);
+    expect(matchesGameFilter("Just Chatting, GTA VI", "Just Chatting")).toBe(true);
+    // Sur un titre : mot entier, pas un morceau de mot
+    expect(matchesGameFilter("GTA 6", null, "Soirée GTA 60 fps")).toBe(false);
+    expect(matchesGameFilter("Grand Theft Auto VI", null, "DÉCOUVERTE GTA VI avec les potes")).toBe(true);
   });
 });

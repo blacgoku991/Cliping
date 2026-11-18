@@ -140,6 +140,10 @@ async function main(): Promise<void> {
     `IA titres : ${env.ai.apiKey ? `oui (${env.ai.model})` : "non (titres génériques)"} · sous-titres : ${transcriptionEnabled() ? `oui (${env.transcribe.model})` : "non"}`,
   );
 
+  if (env.encryptionKey.length < 32) {
+    log("worker", "⚠ ENCRYPTION_KEY absente ou trop courte : la publication sur TikTok/YouTube ne pourra pas fonctionner.");
+  }
+
   await resetStaleState();
   // Tâches restées verrouillées par un worker précédent tué en plein travail.
   const requeued = await requeueStaleJobs(0);

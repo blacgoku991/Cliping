@@ -57,7 +57,7 @@ export default async function StreamersPage() {
           <SubmitButton variant="primary" pendingLabel="Ajout…" className="sm:col-span-2 lg:col-span-1">Ajouter</SubmitButton>
         </ActionForm>
         <p className="border-t border-line px-5 py-3 text-xs leading-relaxed text-faint">
-          Le filtre de jeu doit reprendre le nom exact de la catégorie affichée sur Twitch ou Kick (plusieurs jeux possibles, séparés par des virgules). Sur YouTube, il est cherché dans le titre du live.
+          Le filtre de jeu correspond à la catégorie affichée sur Twitch ou Kick (« GTA 6 », « GTA VI » et « Grand Theft Auto VI » sont équivalents ; plusieurs jeux possibles, séparés par des virgules). Sur YouTube, il est cherché dans le titre du live. Si une chaîne est en live sans être captée, sa carte t&apos;indique la catégorie exacte à recopier.
         </p>
       </Card>
 
@@ -91,8 +91,10 @@ export default async function StreamersPage() {
                             ? `Hors ligne · vérifié ${ago(s.lastCheckedAt)}${s.lastLiveAt ? ` · dernier live ${ago(s.lastLiveAt)}` : ""}`
                             : "Première vérification dans moins d'une minute"}
                       </p>
-                      {s.isLive && !recording && s.gameFilter ? (
-                        <p className="mt-0.5 text-xs text-warn">En live, mais pas sur « {s.gameFilter} » : pas de capture.</p>
+                      {s.isLive && !recording && s.gameFilter && s.enabled ? (
+                        <p className="mt-0.5 text-xs text-warn">
+                          En live{s.liveCategory ? ` sur « ${s.liveCategory} »` : ""}, ce qui ne correspond pas au filtre « {s.gameFilter} » : pas de capture.
+                        </p>
                       ) : null}
                       {s.lastError ? <p className="mt-0.5 break-words text-xs text-bad">{s.lastError}</p> : null}
                     </div>
@@ -118,7 +120,7 @@ export default async function StreamersPage() {
                   </summary>
                   <ActionForm action={updateStreamer} className="grid gap-4 px-5 pb-5 pt-2 md:grid-cols-2" messageClassName="md:col-span-2">
                     <input type="hidden" name="id" value={s.id} />
-                    <Field label="Jeux à capter" hint="Nom exact de la catégorie, plusieurs séparés par des virgules. Vide = tous les lives.">
+                    <Field label="Jeux à capter" hint="Catégorie du live, plusieurs séparées par des virgules. Vide = tous les lives.">
                       <Input name="gameFilter" defaultValue={s.gameFilter} placeholder="Grand Theft Auto VI" />
                     </Field>
                     <Field label="Qualité de capture" hint="« best » prend la meilleure disponible. « 720p60,best » économise du disque et du processeur.">

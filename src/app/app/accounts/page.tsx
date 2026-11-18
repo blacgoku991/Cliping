@@ -38,6 +38,11 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
       <PageHeader title="Comptes" subtitle="Connecte autant de comptes TikTok et de chaînes YouTube que tu veux. Tu choisis ensuite, clip par clip, où publier." />
       {sp.connected ? <Notice tone="ok" className="mb-5">Compte connecté : {sp.connected}</Notice> : null}
       {sp.error ? <Notice tone="bad" className="mb-5">{sp.error}</Notice> : null}
+      {env.encryptionKey.length < 32 ? (
+        <Notice tone="warn" className="mb-5">
+          <strong>ENCRYPTION_KEY n&apos;est pas définie sur le serveur</strong> (32 caractères minimum). Elle protège les accès à tes comptes : sans elle, aucune connexion ne peut être enregistrée. Génère-la avec <code className="rounded bg-black/30 px-1.5 py-0.5 text-xs">openssl rand -base64 32</code>, ajoute-la au fichier <code className="rounded bg-black/30 px-1.5 py-0.5 text-xs">.env</code> et redémarre.
+        </Notice>
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         {Object.values(PLATFORMS).map((p) => {

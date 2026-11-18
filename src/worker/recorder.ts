@@ -117,7 +117,7 @@ export class LiveRecorder {
       "--stdout",
       "--loglevel", "warning",
       "--retry-open", "2",
-      ...(streamer.platform === "TWITCH" ? ["--twitch-disable-ads"] : []),
+      // Twitch : streamlink filtre lui-même les coupures pub (pas d'option à passer depuis la v7).
       streamer.url,
       streamer.quality || "best",
     ];

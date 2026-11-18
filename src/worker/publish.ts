@@ -63,6 +63,10 @@ export async function publish(publicationId: string): Promise<void> {
     await applyResult(publicationId, pub.accountId, result);
     log("publish", `${adapter.label} · ${pub.account.displayName} : ${result.status === "PUBLISHED" ? "publié" : "en traitement"} ${result.url ?? ""}`);
   } catch (err) {
+    // Jeton refusé par la plateforme (accès révoqué) : le compte est signalé « à reconnecter » dans l'interface.
+    if (err instanceof ReauthRequiredError) {
+      await db.socialAccount.update({ where: { id: pub.accountId }, data: { valid: false } }).catch(() => {});
+    }
     throw classify(err, adapter.label);
   }
 }
