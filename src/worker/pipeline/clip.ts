@@ -2,6 +2,7 @@ import { rename, writeFile } from "node:fs/promises";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { PermanentError } from "@/lib/jobs";
+import { keepClip, rejectionNote, viralityScore } from "@/lib/virality";
 import { effectiveEdit, parseSettings } from "@/lib/settings";
 import { creditLabel } from "@/lib/sources";
 import { CLIP_FILES, clipDir, clipFile, fileSize } from "@/lib/storage";
@@ -83,7 +84,14 @@ export async function processClip(clipId: string): Promise<void> {
 
     // 3. Titre, accroche, hashtags, note de potentiel.
     if (!clip.title) {
-      const signals = (clip.signals ?? {}) as { audio?: number; chat?: number | null; scene?: number | null; detector?: number };
+      const signals = (clip.signals ?? {}) as {
+        audio?: number;
+        chat?: number | null;
+        scene?: number | null;
+        detector?: number;
+        clipRequests?: number | null;
+        clipBaseline?: number | null;
+      };
       // Quatre images autour du pic (mise en place, pic, réaction) : l'IA décrit ce qui se passe vraiment à l'écran.
       const peak = Math.min(Math.max(clip.peakSec, startSec), endSec);
       const shots = [peak - 3, peak - 0.5, peak + 1, peak + 3].map((t) => Math.min(Math.max(t, startSec), endSec - 0.1));
@@ -113,8 +121,14 @@ export async function processClip(clipId: string): Promise<void> {
           emphasis: meta.emphasis,
           description: meta.description,
           hashtags: meta.hashtags,
-          // Note finale : moitié signaux mesurés, moitié jugement de l'IA sur le contenu.
-          score: meta.viralScore === null ? detectorScore : Math.round(0.55 * detectorScore + 0.45 * meta.viralScore),
+          // Potentiel : signaux mesurés (intensité, chat, demandes de clip) + avis de l'IA quand elle est là.
+          score: viralityScore({
+            detector: detectorScore,
+            chat: typeof signals.chat === "number" ? signals.chat : null,
+            clipRequests: typeof signals.clipRequests === "number" ? signals.clipRequests : null,
+            clipBaseline: typeof signals.clipBaseline === "number" ? signals.clipBaseline : null,
+            ai: meta.viralScore,
+          }).score,
           signals: { ...signals, detector: detectorScore, ai: meta.viralScore, reason: meta.reason, hookAngles: meta.hookAngles },
         },
       });
@@ -122,8 +136,15 @@ export async function processClip(clipId: string): Promise<void> {
 
     // 4. Montage.
     await renderClip(clipId, loudness);
-    await db.clip.updateMany({ where: { id: clipId, status: "PROCESSING" }, data: { status: "READY", error: null } });
-    log("clip", `${clipId} prêt`);
+    // Tri : sous le potentiel minimum choisi, le clip part directement dans « Écartés » (monté quand même, pour vérifier).
+    const scored = await db.clip.findUnique({ where: { id: clipId }, select: { score: true } });
+    const score = scored?.score ?? 0;
+    const keep = keepClip(score, settings.minScore);
+    await db.clip.updateMany({
+      where: { id: clipId, status: "PROCESSING" },
+      data: keep ? { status: "READY", error: null } : { status: "REJECTED", error: rejectionNote(score, settings.minScore) },
+    });
+    log("clip", keep ? `${clipId} prêt (potentiel ${score})` : `${clipId} écarté (potentiel ${score} < ${settings.minScore})`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db.clip.updateMany({ where: { id: clipId }, data: { error: message.slice(0, 1000) } }).catch(() => {});

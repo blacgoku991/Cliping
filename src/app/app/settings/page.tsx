@@ -44,6 +44,9 @@ export default async function SettingsPage() {
             <Field label="Clips max par heure et par live" hint="Garde-fou pour ne pas être noyé pendant un live très agité.">
               <Input name="maxClipsPerHour" type="number" min={1} max={60} defaultValue={s.maxClipsPerHour} />
             </Field>
+            <Field label="Potentiel minimum pour garder un clip" hint="De 0 à 100. En dessous, le clip part directement dans « Écartés » : seuls les moments les plus forts arrivent à valider. 60 par défaut ; monte à 70 ou plus pour être très sélectif.">
+              <Input name="minScore" type="number" min={0} max={100} defaultValue={s.minScore} />
+            </Field>
             <Field label="Durée minimale (s)"><Input name="clipMinSec" type="number" min={8} max={60} defaultValue={s.clipMinSec} /></Field>
             <Field label="Durée maximale (s)"><Input name="clipMaxSec" type="number" min={15} max={180} defaultValue={s.clipMaxSec} /></Field>
             <Field label="Contexte avant l'action (s)" hint="Ce qui précède le moment fort : la mise en place qui rend le clip compréhensible.">

@@ -19,6 +19,7 @@ export async function saveSettings(_prev: FormState, form: FormData): Promise<Fo
     preRollSec: n("preRollSec"),
     postRollSec: n("postRollSec"),
     maxClipsPerHour: Math.round(n("maxClipsPerHour")),
+    minScore: Math.round(n("minScore")),
     template: String(form.get("template") ?? "BLUR"),
     zoom: n("zoom"),
     captions: form.get("captions") === "on",

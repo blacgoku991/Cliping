@@ -10,6 +10,7 @@ import { clipDir, clipFile, ensureDir, recordingDir, removeDir } from "@/lib/sto
 import { defaultDetectorOptions, HighlightDetector, snapToQuiet, thresholdForSensitivity, type Highlight } from "./analysis/detector";
 import { analyzeMedia, SILENCE_LUFS } from "./analysis/features";
 import { TwitchChat } from "./chat/twitch";
+import { viralityScore } from "@/lib/virality";
 import { log, runOk } from "./proc";
 import { twitchHlsUrl, twitchReaderCommand, twitchViaYtdlp } from "./twitch-ytdlp";
 import { validFacecam } from "./render/render";
@@ -324,6 +325,18 @@ export class LiveRecorder {
     const { streamer, settings } = this.target;
     const template = settings.template === "FACECAM" && !validFacecam(streamer.facecam) ? "BLUR" : settings.template;
 
+    // Demandes de clip dans le chat pendant le moment (avec le retard habituel du chat, et 10 s de réaction après).
+    let clipRequests: number | null = null;
+    let clipBaseline: number | null = null;
+    if (this.chat && this.chat.counter.total > 0) {
+      const lag = env.worker.chatLagSec;
+      const from = Math.floor(this.wallAt(h.start) + lag);
+      const to = Math.ceil(this.wallAt(h.end) + lag + 10);
+      clipRequests = this.chat.counter.clipsBetween(from, to);
+      clipBaseline = Math.round(this.chat.counter.clipBaseline(from, to - from + 1) * 10) / 10;
+    }
+    const potential = viralityScore({ detector: h.score, chat: h.parts.chat, clipRequests, clipBaseline, ai: null });
+
     const clip = await db.clip.create({
       data: {
         userId: this.target.userId,
@@ -336,8 +349,8 @@ export class LiveRecorder {
         startSec: h.start - origin,
         endSec: Math.min(h.end, this.timeline) - origin,
         sourceDur,
-        score: h.score,
-        signals: { ...h.parts, detector: h.score, raw: h.raw },
+        score: potential.score,
+        signals: { ...h.parts, detector: h.score, raw: h.raw, clipRequests, clipBaseline },
         captions: settings.captions,
       },
     });

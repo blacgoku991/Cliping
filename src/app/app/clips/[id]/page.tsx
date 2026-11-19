@@ -66,7 +66,15 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
   ]);
 
   const status = clipStatus(clip);
-  const signals = (clip.signals ?? {}) as { audio?: number; chat?: number | null; scene?: number | null; ai?: number | null; reason?: string };
+  const signals = (clip.signals ?? {}) as {
+    audio?: number;
+    chat?: number | null;
+    scene?: number | null;
+    ai?: number | null;
+    reason?: string;
+    clipRequests?: number | null;
+    clipBaseline?: number | null;
+  };
   const busy = clip.status === "PROCESSING" || rendering > 0;
   const version = clip.renderedAt?.getTime() ?? 0;
   const author = clip.streamer?.displayName ?? clip.recording?.author ?? "Import";
@@ -160,6 +168,12 @@ export default async function ClipPage({ params }: { params: Promise<{ id: strin
               <Signal icon={<MessageSquare className="size-3.5" />} label="Réaction du chat" value={signals.chat} />
               <Signal icon={<Zap className="size-3.5" />} label="Action à l'écran" value={signals.scene} />
             </div>
+            {typeof signals.clipRequests === "number" ? (
+              <p className="border-t border-line px-5 py-3 text-sm text-muted">
+                <strong className="text-ink">{signals.clipRequests}</strong> message{signals.clipRequests > 1 ? "s" : ""} « clip » dans le chat pendant le moment
+                {typeof signals.clipBaseline === "number" ? <span className="text-faint"> (habituellement {signals.clipBaseline.toLocaleString("fr-FR")} sur la même durée)</span> : null}
+              </p>
+            ) : null}
             {signals.reason ? (
               <p className="flex gap-2 border-t border-line px-5 py-4 text-sm leading-relaxed text-muted">
                 <Sparkles className="mt-0.5 size-4 shrink-0 text-brand" />

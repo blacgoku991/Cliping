@@ -19,13 +19,20 @@ export function messageWeight(text: string): number {
 }
 
 /** Compteur de messages pondérés, rangés par seconde d'horloge. */
+export function isClipRequest(text: string): boolean {
+  return CLIP_WORDS.test(text);
+}
+
 export class ChatCounter {
   private readonly buckets = new Map<number, number>();
+  /** Messages qui demandent un clip, par seconde d'horloge */
+  private readonly clipBuckets = new Map<number, number>();
   total = 0;
 
   add(wallMs: number, text: string): void {
     const s = Math.floor(wallMs / 1000);
     this.buckets.set(s, (this.buckets.get(s) ?? 0) + messageWeight(text));
+    if (isClipRequest(text)) this.clipBuckets.set(s, (this.clipBuckets.get(s) ?? 0) + 1);
     this.total++;
   }
 
@@ -33,8 +40,22 @@ export class ChatCounter {
     return this.buckets.get(wallSecond) ?? 0;
   }
 
+  /** Demandes de clip entre deux secondes d'horloge (bornes incluses). */
+  clipsBetween(fromWallSecond: number, toWallSecond: number): number {
+    let n = 0;
+    for (let s = Math.floor(fromWallSecond); s <= Math.ceil(toWallSecond); s++) n += this.clipBuckets.get(s) ?? 0;
+    return n;
+  }
+
+  /** Demandes de clip habituelles pour une fenêtre de `windowSec` secondes, d'après les `lookbackSec` précédentes. */
+  clipBaseline(beforeWallSecond: number, windowSec: number, lookbackSec = 600): number {
+    const total = this.clipsBetween(beforeWallSecond - lookbackSec, beforeWallSecond - 1);
+    return (total * Math.max(1, windowSec)) / lookbackSec;
+  }
+
   prune(beforeWallSecond: number): void {
     for (const k of this.buckets.keys()) if (k < beforeWallSecond) this.buckets.delete(k);
+    for (const k of this.clipBuckets.keys()) if (k < beforeWallSecond) this.clipBuckets.delete(k);
   }
 }
 
