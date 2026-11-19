@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { env } from "@/lib/env";
 import { run, runOk } from "./proc";
 
@@ -9,8 +11,9 @@ import { run, runOk } from "./proc";
  * aucun flux et répond « No playable streams » même pour une chaîne en live. yt-dlp, lui, lit ce format.
  *
  * On utilise donc yt-dlp pour savoir si une chaîne Twitch est en live et pour obtenir l'adresse de la liste
- * de lecture à la qualité voulue ; streamlink lit ensuite cette liste comme un flux HLS ordinaire.
- * Limite connue : streamlink ne retire plus les coupures publicitaires de Twitch dans ce mode.
+ * de lecture à la qualité voulue. Le flux est ensuite lu par twitch-hls.py, qui réutilise le lecteur Twitch de
+ * streamlink : les coupures publicitaires sont retirées comme avant. Si ce lecteur est introuvable, streamlink
+ * lit la liste comme un flux HLS ordinaire, et les pubs passent alors dans la capture.
  *
  * TWITCH_VIA_YTDLP=false revient au comportement d'origine (banc d'essai, ou streamlink corrigé un jour).
  */
@@ -75,4 +78,39 @@ export async function twitchHlsUrl(url: string, quality: string): Promise<string
   const line = stdout.trim().split("\n").filter((l) => /^https:\/\//.test(l)).pop();
   if (!line) throw new Error("yt-dlp n'a pas donné d'adresse de lecture pour ce live");
   return line;
+}
+
+/**
+ * Interpréteur Python de streamlink (celui qui a streamlink dans ses modules), pour lancer twitch-hls.py.
+ * STREAMLINK_PYTHON le force ; sinon on le lit sur la première ligne (#!) du programme streamlink.
+ */
+export function streamlinkPython(): string | null {
+  if (process.env.STREAMLINK_PYTHON) return process.env.STREAMLINK_PYTHON;
+  const bin = env.bin.streamlink;
+  const candidates = bin.includes("/") ? [bin] : (process.env.PATH ?? "").split(":").filter(Boolean).map((d) => path.join(d, bin));
+  for (const file of candidates) {
+    try {
+      if (!existsSync(file)) continue;
+      const first = readFileSync(file, "utf8").slice(0, 300).split("\n")[0] ?? "";
+      const m = /^#!\s*(\S*python[\w.]*)/.exec(first);
+      if (m?.[1] && existsSync(m[1])) return m[1];
+    } catch {
+      // fichier illisible : on essaie le suivant
+    }
+  }
+  return null;
+}
+
+/** Lecteur sans pubs, à côté de ce fichier. */
+export const TWITCH_HLS_SCRIPT = path.join(import.meta.dirname, "twitch-hls.py");
+
+/** Commande qui écrit le flux Twitch (sans pubs si possible) sur la sortie standard. */
+export function twitchReaderCommand(hlsUrl: string): { cmd: string; args: string[]; adFree: boolean } {
+  const py = streamlinkPython();
+  if (py && existsSync(TWITCH_HLS_SCRIPT)) return { cmd: py, args: [TWITCH_HLS_SCRIPT, hlsUrl], adFree: true };
+  return {
+    cmd: env.bin.streamlink,
+    args: [...env.worker.streamlinkArgs, "--stdout", "--loglevel", "warning", "--retry-open", "2", `hls://${hlsUrl}`, "best"],
+    adFree: false,
+  };
 }

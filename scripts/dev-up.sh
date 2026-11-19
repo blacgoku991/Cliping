@@ -26,6 +26,8 @@ rm -f "$E2E_DIR/started" "$E2E_DIR/live"
 
 if [ "${1:-}" = "reel" ]; then
   # Vrais lives : vrais streamlink / yt-dlp, vrai chat Twitch, pas de fausse transcription.
+  # Derrière un proxy HTTPS (environnement cloud), Node ne l'utilise que si on le lui demande.
+  [ -n "${HTTPS_PROXY:-}" ] && export NODE_USE_ENV_PROXY=1 NODE_NO_WARNINGS=1
   MONITOR_INTERVAL_SEC=30 nohup npx tsx --env-file=.env src/worker/index.ts > "$LOGS/worker.log" 2>&1 &
 else
   nohup node tests/e2e/mock-services.mjs > "$LOGS/mock.log" 2>&1 &

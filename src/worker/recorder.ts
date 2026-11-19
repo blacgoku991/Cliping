@@ -11,7 +11,7 @@ import { defaultDetectorOptions, HighlightDetector, snapToQuiet, thresholdForSen
 import { analyzeMedia, SILENCE_LUFS } from "./analysis/features";
 import { TwitchChat } from "./chat/twitch";
 import { log, runOk } from "./proc";
-import { twitchHlsUrl, twitchViaYtdlp } from "./twitch-ytdlp";
+import { twitchHlsUrl, twitchReaderCommand, twitchViaYtdlp } from "./twitch-ytdlp";
 import { validFacecam } from "./render/render";
 
 /** Marge gardée avant/après chaque clip dans source.mp4, pour pouvoir ajuster la coupe à la main. */
@@ -113,21 +113,22 @@ export class LiveRecorder {
       this.chat.start();
     }
 
-    // Twitch : l'adresse de lecture vient de yt-dlp (voir twitch-ytdlp.ts) ; streamlink la lit en HLS simple.
-    let input = streamer.url;
-    let quality = streamer.quality || "best";
-    if (twitchViaYtdlp(streamer.url)) {
-      input = `hls://${await twitchHlsUrl(streamer.url, quality)}`;
-      quality = "best";
-    }
-    const slArgs = [
+    // Twitch : l'adresse de lecture vient de yt-dlp, le flux est lu sans pubs (voir twitch-ytdlp.ts).
+    let readCmd = env.bin.streamlink;
+    let readArgs = [
       ...env.worker.streamlinkArgs,
       "--stdout",
       "--loglevel", "warning",
       "--retry-open", "2",
-      input,
-      quality,
+      streamer.url,
+      streamer.quality || "best",
     ];
+    if (twitchViaYtdlp(streamer.url)) {
+      const reader = twitchReaderCommand(await twitchHlsUrl(streamer.url, streamer.quality || "best"));
+      readCmd = reader.cmd;
+      readArgs = reader.args;
+      if (!reader.adFree) log(this.tag(), "lecteur Twitch sans pubs introuvable : les coupures publicitaires passeront dans la capture");
+    }
     const ffArgs = [
       "-hide_banner", "-loglevel", "error",
       "-fflags", "+genpts+discardcorrupt",
@@ -141,7 +142,7 @@ export class LiveRecorder {
       "seg_%06d.ts",
     ];
 
-    const sl = spawn(env.bin.streamlink, slArgs, { stdio: ["ignore", "pipe", "pipe"] });
+    const sl = spawn(readCmd, readArgs, { stdio: ["ignore", "pipe", "pipe"] });
     const ff = spawn(env.bin.ffmpeg, ffArgs, { cwd: this.dir, stdio: ["pipe", "ignore", "pipe"] });
     this.sl = sl;
     this.ff = ff;
