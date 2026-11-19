@@ -172,7 +172,7 @@ async function main(): Promise<void> {
   if (!ok[0] || !ok[1]) throw new Error("ffmpeg et ffprobe sont indispensables au worker.");
   log(
     "worker",
-    `IA titres : ${env.ai.apiKey ? `oui (${env.ai.model})` : "non (titres génériques)"} · sous-titres : ${transcriptionEnabled() ? `oui (${env.transcribe.model})` : "non"}`,
+    `IA titres : ${env.ai.apiKey ? `oui (${env.ai.model})` : transcriptionEnabled() ? "non (titres tirés des paroles du streamer)" : "non (titres neutres)"} · sous-titres : ${transcriptionEnabled() ? `oui (${env.transcribe.model})` : "non"}`,
   );
 
   if (env.encryptionKey.length < 32) {

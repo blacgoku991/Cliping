@@ -6,7 +6,7 @@ import { keepClip, rejectionNote, viralityScore } from "@/lib/virality";
 import { effectiveEdit, parseSettings } from "@/lib/settings";
 import { creditLabel } from "@/lib/sources";
 import { CLIP_FILES, clipDir, clipFile, fileSize } from "@/lib/storage";
-import { fallbackMetadata, generateMetadata, type MetadataContext } from "../ai";
+import { fallbackMetadata, gameFromTitle, generateMetadata, type MetadataContext } from "../ai";
 import { analyzeMedia } from "../analysis/features";
 import { probe } from "../analysis/probe";
 import { env } from "@/lib/env";
@@ -26,6 +26,12 @@ function asWords(json: Prisma.JsonValue | null): Word[] {
     }
   }
   return out;
+}
+
+/** « GTA 6 » → « GTA 6 » ; « GTA 6, GTA 5 » ou vide → null. */
+function singleGame(filter: string | null | undefined): string | null {
+  const games = (filter ?? "").split(",").map((g) => g.trim()).filter(Boolean);
+  return games.length === 1 ? games[0]! : null;
 }
 
 /** Durée du carton de fin. */
@@ -100,11 +106,19 @@ export async function processClip(clipId: string): Promise<void> {
         frames: frames.map((f) => ({ at: `${f.t - peak >= 0 ? "+" : "−"}${Math.abs(f.t - peak).toFixed(1)} s du pic`, jpeg: f.jpeg })),
         streamer: clip.streamer?.displayName ?? clip.recording?.author ?? "",
         platform: clip.streamer?.platform ?? "OTHER",
-        game: clip.recording?.category ?? clip.streamer?.liveCategory ?? null,
+        // Twitch lu par yt-dlp ne donne pas la catégorie : on reconnaît le jeu dans le titre du live (« GTA 6 … »),
+        // sinon on prend le jeu du filtre de la chaîne quand il n'y en a qu'un (tu as dit qu'elle jouait à ça).
+        game:
+          clip.recording?.category ??
+          clip.streamer?.liveCategory ??
+          gameFromTitle(clip.recording?.title ?? clip.streamer?.liveTitle) ??
+          singleGame(clip.streamer?.gameFilter),
         streamTitle: clip.recording?.title ?? null,
         language: settings.language,
         durationSec: endSec - startSec,
         transcript: wordsToText(words, startSec, endSec),
+        words,
+        moment: { start: startSec, end: endSec, peak },
         signals: { audio: signals.audio ?? 0, chat: signals.chat ?? null, scene: signals.scene ?? null },
         defaultHashtags: settings.defaultHashtags,
       };

@@ -147,7 +147,8 @@ export function cleanBurnText(text: string): string {
   return text
     .replace(/[{}\\]/g, "")
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/gu, "")
-    .replace(/\s+/g, " ")
+    // Les espaces insécables restent (« citation » : le guillemet ne part pas seul à la ligne).
+    .replace(/[^\S\u00A0]+/g, " ")
     .trim();
 }
 

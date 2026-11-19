@@ -41,6 +41,9 @@ if command -v uv >/dev/null 2>&1; then
   command -v yt-dlp >/dev/null || uv tool install yt-dlp >/dev/null 2>&1 || true
 fi
 
+echo "▸ Sous-titres (transcription locale)"
+scripts/whisper-setup.sh >/dev/null 2>&1 || echo "  ⚠ transcription locale non installée (lance scripts/whisper-setup.sh pour voir l'erreur)"
+
 echo "▸ Faux live de test ($E2E_DIR/stream.mp4)"
 mkdir -p "$E2E_DIR"
 if [ ! -f "$E2E_DIR/stream.mp4" ]; then

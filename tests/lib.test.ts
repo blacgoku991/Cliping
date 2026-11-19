@@ -133,6 +133,7 @@ describe("titres par défaut", () => {
     expect(meta.title).toContain("Inox");
     expect(meta.title).toContain("GTA 6");
     expect(meta.viralScore).toBeNull();
-    expect(meta.hashtags).toEqual(["gta6", "inox"]);
+    // Jeu, streamer, variante du jeu, communauté Twitch FR, puis les tags réglés.
+    expect(meta.hashtags).toEqual(["gta6", "inox", "gtavi", "twitchfr", "gta6gameplay"]);
   });
 });

@@ -4,7 +4,8 @@ import { z } from "zod";
 import { env } from "@/lib/env";
 import { HOOK_ANGLES, type HookAngle } from "@/lib/settings";
 import { log } from "./proc";
-import { normWord } from "./render/captions";
+import { pickQuotes, quoted, quoteEmoji } from "./quotes";
+import { normWord, type Word } from "./render/captions";
 
 const uniq = (xs: string[]) => xs.filter((x, i) => x && xs.indexOf(x) === i);
 
@@ -38,6 +39,9 @@ export interface MetadataContext {
   defaultHashtags: string[];
   /** Images JPEG tirées de l'extrait autour du moment fort, dans l'ordre chronologique (peut être vide) */
   frames?: Array<{ at: string; jpeg: Buffer }>;
+  /** Mots horodatés (secondes depuis le début du fichier source) et bornes de l'extrait : servent à choisir une citation */
+  words?: Word[];
+  moment?: { start: number; end: number; peak: number };
 }
 
 export { HOOK_ANGLES, type HookAngle };
@@ -148,6 +152,29 @@ export function shortGameName(category: string | null | undefined): string {
   return c;
 }
 
+/** Jeux reconnus dans le titre d'un live, quand la plateforme ne donne pas la catégorie (Twitch lu par yt-dlp). */
+const TITLE_GAMES: Array<[RegExp, string]> = [
+  [/\bgta\s*(?:6|vi)\b|grand theft auto\s*(?:6|vi)\b/i, "GTA 6"],
+  [/\bgta\s*rp\b/i, "GTA RP"],
+  [/\bgta\s*online\b/i, "GTA Online"],
+  [/\bgta\s*(?:5|v)\b|grand theft auto\s*(?:5|v)\b/i, "GTA 5"],
+  [/\bfortnite\b/i, "Fortnite"],
+  [/\bminecraft\b/i, "Minecraft"],
+  [/\bvalorant\b/i, "Valorant"],
+  [/\bwarzone\b/i, "Warzone"],
+  [/\bleague of legends\b/i, "League of Legends"],
+  [/\bcs2\b|\bcounter[- ]?strike\b/i, "Counter-Strike 2"],
+  [/\brocket league\b/i, "Rocket League"],
+  [/\bea (?:sports )?fc\b/i, "EA FC"],
+];
+
+/** « GTA 6 ON CONTINUE LIVE 233H » → « GTA 6 ». null si aucun jeu connu n'est cité. */
+export function gameFromTitle(title: string | null | undefined): string | null {
+  const t = title ?? "";
+  for (const [re, name] of TITLE_GAMES) if (re.test(t)) return name;
+  return null;
+}
+
 function cleanTag(tag: string): string {
   return tag
     .normalize("NFD")
@@ -166,38 +193,100 @@ export function mergeHashtags(...lists: string[][]): string[] {
   return [...seen].slice(0, 10);
 }
 
-/** Titre neutre quand l'IA n'est pas configurée : on décrit sans rien inventer. */
+/**
+ * Hashtags que les gens tapent pour chaque jeu : le nom court d'abord, puis les variantes vraiment utilisées.
+ * Pour GTA 6, la sortie fait de #gta6 / #gtavi les tags les plus cherchés du moment ; #gta6gameplay vise ceux
+ * qui veulent voir le jeu tourner, ce que montrent justement les clips de live.
+ */
+const GAME_TAGS: Record<string, string[]> = {
+  "GTA 6": ["gta6", "gtavi", "gta6gameplay"],
+  "GTA 5": ["gta5", "gtav"],
+  "GTA RP": ["gtarp", "gta"],
+  "GTA Online": ["gtaonline", "gta5"],
+};
+
+/** Nombre de hashtags gardés : Instagram n'en accepte que 5, et au-delà de 5 à 8 tags précis, on dilue. */
+export const HASHTAGS_MAX = 8;
+
+/**
+ * Hashtags d'un clip, du plus utile au moins utile (Instagram ne garde que les 5 premiers, YouTube affiche les 3 premiers) :
+ * le jeu, le streamer (les gens cherchent leurs streamers), la variante du jeu, la communauté (#twitchfr), puis
+ * ceux que tu as réglés, puis ceux proposés par l'IA. Rien de tendance sans rapport avec le clip.
+ */
+export function clipHashtags(input: {
+  game: string | null;
+  streamer: string;
+  platform: string;
+  language: string;
+  defaults: string[];
+  extra?: string[];
+}): string[] {
+  const game = shortGameName(input.game);
+  const gameTags = game ? (GAME_TAGS[game] ?? [game]) : [];
+  const community =
+    input.platform === "TWITCH" ? (input.language === "fr" ? "twitchfr" : "twitch") : input.platform === "KICK" ? (input.language === "fr" ? "kickfr" : "kick") : "";
+  const first = [gameTags[0] ?? "", input.streamer, gameTags[1] ?? "", community, ...gameTags.slice(2)];
+  // Tes hashtags réglés passent avant ceux de l'IA.
+  return mergeHashtags(first, input.defaults, input.extra ?? []).slice(0, HASHTAGS_MAX);
+}
+
+function seedIndex(seed: string, n: number): number {
+  let h = 0;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return n ? h % n : 0;
+}
+
+/**
+ * Titres, accroches et hashtags quand l'IA n'est pas configurée. On n'invente rien : l'accroche est une phrase
+ * réellement prononcée par le streamer près du moment fort (choisie par pickQuotes), le titre la reprend avec le
+ * nom du streamer et du jeu (ce que les gens cherchent). Sans parole exploitable, titres neutres.
+ */
 export function fallbackMetadata(ctx: MetadataContext, seed: string): ClipMetadata {
   const game = shortGameName(ctx.game);
   const who = ctx.streamer.trim();
-  let variants: string[];
-  if (who && game) variants = [`${who} sur ${game} 🔥`, `Le moment de ${who} sur ${game} 😱`, `${who} en live sur ${game} 👀`];
-  else if (who) variants = [`${who} en live 🔥`, `Le moment de ${who} 😱`, `${who} en direct 👀`];
-  else if (game) variants = [`Moment fort sur ${game} 🔥`, `Ça part en vrille sur ${game} 😱`, `${game} : le moment à voir 👀`];
-  else variants = ["Le moment à ne pas rater 🔥", "Moment fort du live 😱", "Extrait du live 👀"];
-  let h = 0;
-  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const k = h % variants.length;
-  const titles = [...variants.slice(k), ...variants.slice(0, k)];
-  // Accroches neutres : on ne sait pas ce qui se passe, on n'invente rien.
-  const hooks = (
-    who && game
-      ? [`${who} sur ${game}`, `Le moment de ${who}`, `${game} en live`]
-      : who
-        ? [`Le moment de ${who}`, `${who} en live`, `${who} en direct`]
-        : game
-          ? [`Moment fort sur ${game}`, `${game} en live`, `Ça se passe sur ${game}`]
-          : ["", "Moment fort du live", "Extrait du live"]
-  ).filter((x, i, a) => a.indexOf(x) === i);
+  const where = who && game ? `${who} sur ${game}` : who || (game ? `Moment fort sur ${game}` : "");
+  const quotes = ctx.words?.length && ctx.moment ? pickQuotes(ctx.words, ctx.moment) : [];
+  const best = quotes[0];
+
+  let neutral: string[];
+  if (who && game) neutral = [`${who} sur ${game} 🔥`, `Le moment de ${who} sur ${game} 😱`, `${who} en live sur ${game} 👀`];
+  else if (who) neutral = [`${who} en live 🔥`, `Le moment de ${who} 😱`, `${who} en direct 👀`];
+  else if (game) neutral = [`Moment fort sur ${game} 🔥`, `Ça part en vrille sur ${game} 😱`, `${game} : le moment à voir 👀`];
+  else neutral = ["Le moment à ne pas rater 🔥", "Moment fort du live 😱", "Extrait du live 👀"];
+  const k = seedIndex(seed, neutral.length);
+  neutral = [...neutral.slice(k), ...neutral.slice(0, k)];
+
+  let titles: string[];
+  if (best) {
+    const q = quoted(best.text);
+    const emoji = quoteEmoji(best.text);
+    titles = [
+      where ? `${q} ${emoji} ${where}` : `${q} ${emoji}`,
+      where ? `${where} : ${q}` : q,
+      quotes[1] ? (where ? `${quoted(quotes[1].text)} ${quoteEmoji(quotes[1].text)} ${where}` : quoted(quotes[1].text)) : neutral[0]!,
+    ];
+    // Un titre trop long est coupé à l'affichage : on retombe sur la citation seule.
+    titles = titles.map((t, i) => (t.length <= 95 ? t : i === 2 ? neutral[0]! : `${q} ${emoji}`));
+  } else {
+    titles = neutral;
+  }
+
+  // Accroches : les citations d'abord (angle « citation »), puis une accroche neutre qui ne promet rien.
+  const quoteHooks = quotes.slice(0, 2).map((q) => quoted(q.text));
+  const neutralHooks = who && game ? [`${who} sur ${game}`, `Le moment de ${who}`] : who ? [`Le moment de ${who}`, `${who} en live`] : game ? [`Moment fort sur ${game}`, `${game} en live`] : ["Moment fort du live", "Extrait du live"];
+  const hooks = uniq([...quoteHooks, ...neutralHooks]).slice(0, 3);
+  const hookAngles: HookAngle[] = quoteHooks.map(() => "citation");
+
+  const context = `Extrait du live${who ? ` de ${who}` : ""}${game ? ` sur ${game}` : ""}.`;
   return {
     title: titles[0]!,
     hook: hooks[0] ?? "",
-    titles,
+    titles: uniq(titles),
     hooks,
-    hookAngles: [],
+    hookAngles,
     emphasis: [],
-    description: `Extrait du live${who ? ` de ${who}` : ""}${game ? ` sur ${game}` : ""}.`,
-    hashtags: mergeHashtags(ctx.defaultHashtags, [who, game]),
+    description: best ? `${context} ${quoted(best.text)}` : context,
+    hashtags: clipHashtags({ game, streamer: who, platform: ctx.platform, language: ctx.language, defaults: ctx.defaultHashtags }),
     viralScore: null,
     reason: "",
   };
@@ -276,7 +365,7 @@ export async function generateMetadata(ctx: MetadataContext): Promise<ClipMetada
       hookAngles: picked.map((h) => h.angle),
       emphasis,
       description: out.description.trim().slice(0, 600),
-      hashtags: mergeHashtags(out.hashtags, ctx.defaultHashtags),
+      hashtags: clipHashtags({ game: ctx.game, streamer: ctx.streamer, platform: ctx.platform, language: ctx.language, defaults: ctx.defaultHashtags, extra: out.hashtags }),
       viralScore: Math.round(Math.min(100, Math.max(0, out.viralScore))),
       reason: out.reason.trim().slice(0, 300),
     };

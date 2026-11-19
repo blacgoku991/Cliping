@@ -156,12 +156,16 @@ Commence en **simulation** : le pilote décide comme s'il était aux commandes e
 
 ## Activer l'IA et les sous-titres
 
-Les deux sont facultatifs. Sans eux, les clips sortent avec un titre générique et sans sous-titres.
+Les deux sont facultatifs. Sans transcription, les clips sortent sans sous-titres ; sans IA, l'accroche et le titre reprennent une phrase réellement prononcée par le streamer (voir plus bas).
 
 | Fonction | Variables | Remarque |
 |---|---|---|
 | Titres, accroches, hashtags, note de potentiel | `ANTHROPIC_API_KEY` | Modèle par défaut `claude-opus-5-5`. Pour de gros volumes, `AI_MODEL="claude-haiku-5-5"` coûte beaucoup moins cher. Le repli automatique vers un autre modèle en cas de refus est activé (sauf Haiku, qui ne le propose pas). |
-| Sous-titres mot à mot | `TRANSCRIBE_API_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | Toute API compatible OpenAI : OpenAI (`whisper-1`), Groq (`whisper-large-v3-turbo`)… Quelques centimes pour des centaines de clips. |
+| Sous-titres mot à mot | `TRANSCRIBE_API_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | Toute API compatible OpenAI : OpenAI (`whisper-1`), Groq (`whisper-large-v3-turbo`)… Quelques centimes pour des centaines de clips. Ou **gratuit, sur ta machine** : `scripts/whisper-setup.sh` installe faster-whisper (modèle `large-v3-turbo`, ~1,6 Go téléchargé au premier lancement), `scripts/whisper-server.py` sert la même API sur `http://127.0.0.1:8770/v1` (clé : n'importe quoi, par ex. `local`). Environ 5 s de calcul pour une minute d'audio sur 4 cœurs. `scripts/dev-up.sh reel` le démarre tout seul quand il est installé. |
+
+**Sans IA**, les titres ne sont plus génériques dès que la transcription marche : le bot choisit dans l'extrait la phrase du streamer la plus forte près du moment fort (courte, lisible en une seconde, une exclamation, une question, un nom propre ou un mot qui fait la chute ; jamais d'insulte ni les génériques que Whisper invente sur du silence) et s'en sert, entre guillemets, comme accroche à l'écran et dans le titre avec le nom du streamer et du jeu (« « Je te kiffe de dingue » 🤯 Squeezie sur GTA 6 »). Rien n'est reformulé ni inventé.
+
+**Hashtags** (avec ou sans IA), du plus utile au moins utile, 8 au plus : le jeu (`#gta6`), le streamer, la variante du jeu (`#gtavi`), la communauté (`#twitchfr`), `#gta6gameplay`, puis tes hashtags par défaut, puis ceux de l'IA. L'ordre compte : Instagram ne garde que les 5 premiers, YouTube affiche les 3 premiers au-dessus du titre. Quand Twitch ne donne pas la catégorie (lecture par yt-dlp), le jeu est reconnu dans le titre du live (« GTA 6 ON CONTINUE… »). Pas de tag « tendance » sans rapport avec le clip : c'est interdit par YouTube et ça fait fuir les gens qui arrivent par ce tag.
 
 ## Comment le bot choisit les moments
 
@@ -187,7 +191,7 @@ Ce qui fait qu'un clip est regardé jusqu'au bout, ce sont les deux premières s
 - **Zoom d'impact** : +12 % progressif sur le gameplay au moment fort, puis retour.
 - **Sous-titres** : cinq styles (Classique, Impact, Encadré, Karaoké, Discret), avec les mots forts mis en valeur (choisis par l'IA, sinon exclamations, chiffres et mots criés).
 - **Barre de progression** fine en haut de l'image, et **carton de fin** optionnel (appel à s'abonner + crédit du streamer, désactivé par défaut : il casse la boucle de relecture).
-- **Trois accroches et trois titres** proposés par l'IA (ou des variantes neutres sans IA), à choisir d'un clic dans l'éditeur. L'IA voit quatre images de l'extrait autour du pic en plus de la transcription, écrit 6 à 8 accroches sous des angles différents (curiosité, enjeu, réaction, citation, question) et n'en garde que trois ; les formules creuses (« REGARDEZ ÇA », « INCROYABLE ») et les accroches de plus de 7 mots sont écartées.
+- **Trois accroches et trois titres** proposés par l'IA (sans IA : les phrases les plus fortes du streamer près du pic, entre guillemets, puis des variantes neutres), à choisir d'un clic dans l'éditeur. L'IA voit quatre images de l'extrait autour du pic en plus de la transcription, écrit 6 à 8 accroches sous des angles différents (curiosité, enjeu, réaction, citation, question) et n'en garde que trois ; les formules creuses (« REGARDEZ ÇA », « INCROYABLE ») et les accroches de plus de 7 mots sont écartées.
 - **Zone sûre TikTok + Shorts** : tous les textes restent hors des zones couvertes par l'interface des deux applis (rien au-dessus de y = 220, sous y = 1440, ni dans les 170 px de droite où sont les boutons). Les clips durent par défaut de 15 à 45 s.
 
 ## Compilations « best-of » pour YouTube
@@ -238,10 +242,10 @@ Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e
 
 **Non vérifié en conditions réelles**, faute d'accès depuis l'environnement de développement :
 
-- la capture de vrais lives Twitch, Kick et YouTube (elle repose sur `streamlink`, l'outil de référence, mais n'a pas pu être essayée ici) ;
+- la capture de vrais lives Kick et YouTube (elle repose sur `streamlink`, l'outil de référence, mais n'a pas pu être essayée ici). Twitch, lui, a été capté en vrai (Squeezie, Gotaga, JLTomy, novembre 2026) : chat lu, pubs retirées, clips montés et sous-titrés par la transcription locale ;
 - la connexion et la publication Instagram Reels : écrites d'après des extraits de la documentation de Meta (site développeur injoignable depuis l'environnement de développement) et des guides tiers pour les codes d'erreur, testées contre un faux Instagram (y compris le téléchargement réel de la vidéo par le lien signé), jamais avec un vrai compte ni une vraie application Meta ;
 - les envois vers YouTube et TikTok (compilations et miniatures comprises) : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
-- l'appel à Claude (titres, accroches avec images du clip, kit de publication, bios, compilations) et à l'API de transcription : aucune clé dans l'environnement de développement, seuls les replis sans IA ont tourné ;
+- l'appel à Claude (titres, accroches avec images du clip, kit de publication, bios, compilations) et aux API de transcription payantes (OpenAI, Groq) : aucune clé valide dans l'environnement de développement. Les replis sans IA et la transcription locale (faster-whisper) ont, eux, tourné sur de vrais lives ;
 - le relevé des performances contre de vrais comptes YouTube ou TikTok (testé contre un réseau simulé et des données fictives) ;
 - l'installation de l'app sur un vrai iPhone, et le mode validation au doigt dans Safari (testés dans un navigateur de bureau qui simule un mobile) ;
 - les seuils de coupe des temps morts et de détection sur de vrais streams et de la vraie parole (calés sur des signaux de synthèse) ;
