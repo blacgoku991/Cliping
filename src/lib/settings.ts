@@ -37,7 +37,7 @@ export const settingsSchema = z.object({
   postRollSec: z.number().min(0).max(20).default(4),
   maxClipsPerHour: z.number().int().min(1).max(60).default(12),
 
-  template: z.enum(["BLUR", "FULL", "FACECAM"]).default("BLUR"),
+  template: z.enum(["BLUR", "FULL", "FACECAM"]).default("FACECAM"),
   /** Zoom du gameplay sur le template BLUR (1 = toute la largeur visible) */
   zoom: z.number().min(1).max(2).default(1.35),
   captions: z.boolean().default(true),
