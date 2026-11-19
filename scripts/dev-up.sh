@@ -3,6 +3,7 @@
 # worker branché sur le faux streamlink, et le site (next dev) sur http://localhost:3000.
 #   scripts/dev-up.sh          démarre (ou redémarre) tout
 #   scripts/dev-up.sh live     idem, et fait « passer en live » la chaîne de démo (4 minutes de flux)
+#   scripts/dev-up.sh reel     capte de VRAIS lives (chaînes suivies du compte), sans faux services
 #   scripts/dev-up.sh stop     arrête tout
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -23,10 +24,15 @@ stop_all
 rm -f "$E2E_DIR/started" "$E2E_DIR/live"
 [ "${1:-}" = "live" ] && touch "$E2E_DIR/live"
 
-nohup node tests/e2e/mock-services.mjs > "$LOGS/mock.log" 2>&1 &
-STREAMLINK_BIN="$PWD/tests/e2e/fake-streamlink.sh" TWITCH_IRC_URL=ws://127.0.0.1:8765 \
-TRANSCRIBE_API_URL=http://127.0.0.1:8765 TRANSCRIBE_API_KEY=test MONITOR_INTERVAL_SEC=10 \
-  nohup npx tsx --env-file=.env src/worker/index.ts > "$LOGS/worker.log" 2>&1 &
+if [ "${1:-}" = "reel" ]; then
+  # Vrais lives : vrais streamlink / yt-dlp, vrai chat Twitch, pas de fausse transcription.
+  MONITOR_INTERVAL_SEC=30 nohup npx tsx --env-file=.env src/worker/index.ts > "$LOGS/worker.log" 2>&1 &
+else
+  nohup node tests/e2e/mock-services.mjs > "$LOGS/mock.log" 2>&1 &
+  STREAMLINK_BIN="$PWD/tests/e2e/fake-streamlink.sh" TWITCH_VIA_YTDLP=false TWITCH_IRC_URL=ws://127.0.0.1:8765 \
+  TRANSCRIBE_API_URL=http://127.0.0.1:8765 TRANSCRIBE_API_KEY=test MONITOR_INTERVAL_SEC=10 \
+    nohup npx tsx --env-file=.env src/worker/index.ts > "$LOGS/worker.log" 2>&1 &
+fi
 nohup npx next dev -p 3000 > "$LOGS/web.log" 2>&1 &
 
 for _ in $(seq 1 40); do

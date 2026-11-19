@@ -5,6 +5,7 @@ import { parseSettings } from "@/lib/settings";
 import { matchesGameFilter } from "@/lib/sources";
 import { log, run } from "./proc";
 import { LiveRecorder } from "./recorder";
+import { twitchLiveStatus, twitchViaYtdlp } from "./twitch-ytdlp";
 
 export interface LiveStatus {
   live: boolean;
@@ -16,6 +17,11 @@ export interface LiveStatus {
 
 /** Interroge streamlink : la chaîne est-elle en live, sur quel jeu ? */
 export async function checkLive(url: string): Promise<LiveStatus> {
+  // Twitch : streamlink ne lit plus le format actuel des listes de lecture, yt-dlp prend le relais.
+  if (twitchViaYtdlp(url)) {
+    const st = await twitchLiveStatus(url);
+    return { live: st.live, title: st.title, category: null, error: st.error };
+  }
   let res;
   try {
     res = await run(env.bin.streamlink, [...env.worker.streamlinkArgs, "--json", url], { timeoutMs: 45_000 });

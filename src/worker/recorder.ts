@@ -11,6 +11,7 @@ import { defaultDetectorOptions, HighlightDetector, snapToQuiet, thresholdForSen
 import { analyzeMedia, SILENCE_LUFS } from "./analysis/features";
 import { TwitchChat } from "./chat/twitch";
 import { log, runOk } from "./proc";
+import { twitchHlsUrl, twitchViaYtdlp } from "./twitch-ytdlp";
 import { validFacecam } from "./render/render";
 
 /** Marge gardée avant/après chaque clip dans source.mp4, pour pouvoir ajuster la coupe à la main. */
@@ -112,14 +113,20 @@ export class LiveRecorder {
       this.chat.start();
     }
 
+    // Twitch : l'adresse de lecture vient de yt-dlp (voir twitch-ytdlp.ts) ; streamlink la lit en HLS simple.
+    let input = streamer.url;
+    let quality = streamer.quality || "best";
+    if (twitchViaYtdlp(streamer.url)) {
+      input = `hls://${await twitchHlsUrl(streamer.url, quality)}`;
+      quality = "best";
+    }
     const slArgs = [
       ...env.worker.streamlinkArgs,
       "--stdout",
       "--loglevel", "warning",
       "--retry-open", "2",
-      // Twitch : streamlink filtre lui-même les coupures pub (pas d'option à passer depuis la v7).
-      streamer.url,
-      streamer.quality || "best",
+      input,
+      quality,
     ];
     const ffArgs = [
       "-hide_banner", "-loglevel", "error",
