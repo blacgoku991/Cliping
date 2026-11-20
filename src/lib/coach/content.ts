@@ -55,7 +55,7 @@ const BIO_TEMPLATES: Record<Tone, string[]> = {
     "Les meilleurs moments {game} {who} 🎮 Crédits aux streamers",
     "Clips {game} de {who} ✨ Abonne-toi pour la suite",
     "{niche} 🎬 Extraits de lives, crédits aux streamers",
-    "Ton dose de {game} : {who} en clips 🎮",
+    "Ta dose de {game} : {who} en clips 🎮",
   ],
   drole: [
     "Les fails et fous rires {game} de {who} 😂",
