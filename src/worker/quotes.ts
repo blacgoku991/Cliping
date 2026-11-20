@@ -48,6 +48,24 @@ const STARTERS = new Set(
 
 const startsUpper = (w: string) => /^\p{Lu}/u.test(w);
 
+/**
+ * Mots qui n'existent qu'en anglais. Le son d'un live mélange la voix du streamer et celle du jeu (dialogues,
+ * radio, souvent en anglais) : une phrase surtout en anglais sur un live français vient presque toujours du jeu,
+ * et la citer comme une phrase du streamer serait faux.
+ */
+const ENGLISH_ONLY = new Set(
+  ["the", "to", "my", "you", "it's", "its", "is", "are", "was", "what", "get", "got", "guy", "said", "myself", "time", "think", "outside",
+   "box", "this", "that", "and", "of", "in", "for", "with", "your", "we", "they", "he", "she", "be", "do", "don't", "can't", "yeah", "i",
+   "i'm", "it", "just", "know", "gonna", "wanna", "like", "goddammit", "real", "really", "occasionally", "here", "there", "where", "why",
+   "how", "have", "has", "had", "will", "would", "need", "want", "go", "going", "come", "look", "see", "man", "now", "right", "shit", "fuck"].map(normWord),
+);
+
+/** Vrai si au moins 40 % des mots de la phrase n'existent qu'en anglais. */
+export function looksEnglish(tokens: string[]): boolean {
+  if (!tokens.length) return false;
+  return tokens.filter((t) => ENGLISH_ONLY.has(t)).length / tokens.length >= 0.4;
+}
+
 const MAX_WORDS = 8;
 const MAX_CHARS = 48;
 
@@ -113,7 +131,7 @@ export function sentenceText(words: Word[]): string {
  * Critères : proche du moment fort, courte (lisible en une seconde), avec du sens (pas que des interjections),
  * une exclamation, une question ou un mot qui fait la chute ; jamais d'insulte ni de phrase inventée par Whisper.
  */
-export function pickQuotes(words: Word[], opts: { start: number; end: number; peak: number }, max = 3): Quote[] {
+export function pickQuotes(words: Word[], opts: { start: number; end: number; peak: number; language?: string }, max = 3): Quote[] {
   const inWindow = words.filter((w) => w.e > opts.start && w.s < opts.end);
   const out: Quote[] = [];
   const seen = new Set<string>();
@@ -123,6 +141,8 @@ export function pickQuotes(words: Word[], opts: { start: number; end: number; pe
     if (tokens.length < 2 || tokens.length > MAX_WORDS || text.length > MAX_CHARS) continue;
     // Un mot masqué par Whisper (« b***h ») ou mal entendu n'a rien à faire dans une accroche.
     if (WHISPER_HALLUCINATIONS.test(text) || INSULTS.test(text) || VULGAR.test(text) || /\*/.test(text)) continue;
+    // Sur un live non anglophone, une phrase en anglais vient du jeu, pas du streamer.
+    if (opts.language && !opts.language.startsWith("en") && looksEnglish(tokens)) continue;
     const meaningful = tokens.filter((t) => !FILLER.has(t));
     if (meaningful.length < 2) continue;
     const key = tokens.join(" ");

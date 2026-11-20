@@ -40,6 +40,12 @@ describe("citations", () => {
     expect(pickQuotes(rude, { start: 8, end: 20, peak: 12 }).map((q) => q.text)).toEqual(["On va voler cette voiture"]);
   });
 
+  it("sur un live français, ne cite pas les dialogues du jeu en anglais", () => {
+    const mixed = words([["I said to myself time to think", 10], ["Hé atterrissage réussi les gars", 14]]);
+    expect(pickQuotes(mixed, { start: 8, end: 20, peak: 12, language: "fr" }).map((q) => q.text)).toEqual(["Hé atterrissage réussi les gars"]);
+    expect(pickQuotes(mixed, { start: 8, end: 20, peak: 12, language: "en" }).map((q) => q.text)).toContain("I said to myself time to think");
+  });
+
   it("ne cite que l'extrait demandé", () => {
     expect(pickQuotes(live, { start: 0, end: 20, peak: 10 })).toEqual([]);
   });

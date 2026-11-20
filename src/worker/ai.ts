@@ -245,7 +245,7 @@ export function fallbackMetadata(ctx: MetadataContext, seed: string): ClipMetada
   const game = shortGameName(ctx.game);
   const who = ctx.streamer.trim();
   const where = who && game ? `${who} sur ${game}` : who || (game ? `Moment fort sur ${game}` : "");
-  const quotes = ctx.words?.length && ctx.moment ? pickQuotes(ctx.words, ctx.moment) : [];
+  const quotes = ctx.words?.length && ctx.moment ? pickQuotes(ctx.words, { ...ctx.moment, language: ctx.language }) : [];
   const best = quotes[0];
 
   let neutral: string[];
