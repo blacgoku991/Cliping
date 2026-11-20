@@ -35,6 +35,11 @@ describe("citations", () => {
     expect(pickQuotes(live, { start: 31, end: 35, peak: 33 })[0]?.text).toBe("Combien il vaut ?");
   });
 
+  it("écarte les grossièretés et les mots masqués par Whisper", () => {
+    const rude = words([["Moi j'en ai pas les couilles", 10], ["J'ai besoin d'un b***h", 13], ["On va voler cette voiture", 16]]);
+    expect(pickQuotes(rude, { start: 8, end: 20, peak: 12 }).map((q) => q.text)).toEqual(["On va voler cette voiture"]);
+  });
+
   it("ne cite que l'extrait demandé", () => {
     expect(pickQuotes(live, { start: 0, end: 20, peak: 10 })).toEqual([]);
   });

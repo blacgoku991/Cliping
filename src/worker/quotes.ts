@@ -28,6 +28,9 @@ const FILLER = new Set(
 /** Insultes : jamais en gros sur la vidéo ni dans le titre. */
 const INSULTS = /\b(conn?ar[dt]s?|connasses?|putes?|salopes?|encul[ée]s?|fdp|ntm|b[aâ]tards?|pd|n[eè]gres?|tapettes?|gogoles?|mongols?|attard[ée]s?)\b/i;
 
+/** Grossièretés : pas en gros sur la vidéo non plus (TikTok et YouTube peuvent limiter la diffusion d'un texte vulgaire). */
+const VULGAR = /\b(couilles?|bites?|chattes?|niqu\w*|bais\w*|branl\w*)\b/i;
+
 /** Mots qui font la chute ou l'enjeu : une phrase qui en contient retient mieux. */
 const PUNCH = new Set(
   ["dingue", "fou", "folle", "ouf", "malade", "incroyable", "jamais", "secret", "secrete", "impossible", "record", "enorme", "millions",
@@ -118,7 +121,8 @@ export function pickQuotes(words: Word[], opts: { start: number; end: number; pe
     const text = sentenceText(s.words);
     const tokens = s.words.filter((w) => !isPunct(w.w)).map((w) => normWord(w.w)).filter(Boolean);
     if (tokens.length < 2 || tokens.length > MAX_WORDS || text.length > MAX_CHARS) continue;
-    if (WHISPER_HALLUCINATIONS.test(text) || INSULTS.test(text)) continue;
+    // Un mot masqué par Whisper (« b***h ») ou mal entendu n'a rien à faire dans une accroche.
+    if (WHISPER_HALLUCINATIONS.test(text) || INSULTS.test(text) || VULGAR.test(text) || /\*/.test(text)) continue;
     const meaningful = tokens.filter((t) => !FILLER.has(t));
     if (meaningful.length < 2) continue;
     const key = tokens.join(" ");
