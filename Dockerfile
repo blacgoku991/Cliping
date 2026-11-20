@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
-# Une seule recette, deux images :
-#   --target web     → le site (Next.js, serveur autonome)
-#   --target worker  → le bot (capture des lives, montage, publication) avec ffmpeg, streamlink et yt-dlp
+# Une seule recette, trois images :
+#   --target web      → le site (Next.js, serveur autonome)
+#   --target worker   → le bot (capture des lives, montage, publication) avec ffmpeg, streamlink et yt-dlp
+#   --target whisper  → la transcription locale des sous-titres (faster-whisper, gratuit, sans clé)
 
 FROM node:22-bookworm-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -50,6 +51,18 @@ COPY --chown=node:node package.json tsconfig.json ./
 COPY --chown=node:node prisma ./prisma
 COPY --chown=node:node assets ./assets
 COPY --chown=node:node src ./src
+COPY --chown=node:node scripts ./scripts
 USER node
 # tsx exécute directement le TypeScript : pas d'étape de compilation à maintenir pour le bot.
 CMD ["node_modules/.bin/tsx", "src/worker/index.ts"]
+
+# ── Transcription locale des sous-titres ──
+# Même API que celle d'OpenAI : le bot l'appelle comme n'importe quel fournisseur. Le modèle (~1,6 Go) est
+# téléchargé au premier lancement dans le volume « whispermodels ».
+FROM python:3.12-slim-bookworm AS whisper
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/* \
+ && pip install --no-cache-dir "faster-whisper>=1.2,<2" numpy
+ENV HF_HOME=/models WHISPER_HOST=0.0.0.0 WHISPER_PORT=8770
+COPY scripts/whisper-server.py /app/whisper-server.py
+EXPOSE 8770
+CMD ["python", "/app/whisper-server.py"]

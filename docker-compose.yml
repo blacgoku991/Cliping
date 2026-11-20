@@ -46,13 +46,28 @@ services:
     build: { context: ., target: worker }
     restart: unless-stopped
     env_file: .env
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Sous-titres : le service « whisper » ci-dessous, sauf si une autre API est réglée dans .env.
+      TRANSCRIBE_API_URL: ${TRANSCRIBE_API_URL:-http://whisper:8770/v1}
+      TRANSCRIBE_API_KEY: ${TRANSCRIBE_API_KEY:-local}
+      TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-large-v3-turbo}
     volumes:
       - clipdata:/data
     depends_on:
       migrate: { condition: service_completed_successfully }
+      whisper: { condition: service_started }
     # Laisse le temps de finir les clips en cours avant l'arrêt.
     stop_grace_period: 2m
+
+  # Sous-titres gratuits : transcription sur le serveur (environ 1 Go de mémoire, 4 cœurs conseillés).
+  whisper:
+    build: { context: ., target: whisper }
+    restart: unless-stopped
+    environment:
+      WHISPER_THREADS: ${WHISPER_THREADS:-4}
+    volumes:
+      - whispermodels:/models
 
   # Optionnel : HTTPS automatique (Let's Encrypt). Indispensable pour connecter TikTok/YouTube hors localhost.
   caddy:
@@ -72,3 +87,4 @@ volumes:
   pgdata:
   clipdata:
   caddydata:
+  whispermodels:

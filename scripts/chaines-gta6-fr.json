@@ -1,0 +1,152 @@
+[
+  {
+    "platform": "TWITCH",
+    "login": "squeezie",
+    "displayName": "Squeezie",
+    "gameFilter": "",
+    "quality": "best",
+    "facecam": {
+      "h": 0.2037,
+      "w": 0.1958,
+      "x": 0.7948,
+      "y": 0.1315
+    }
+  },
+  {
+    "platform": "TWITCH",
+    "login": "gotaga",
+    "displayName": "Gotaga",
+    "gameFilter": "",
+    "quality": "best",
+    "facecam": {
+      "h": 0.2111,
+      "w": 0.2167,
+      "x": 0.7771,
+      "y": 0.363
+    }
+  },
+  {
+    "platform": "TWITCH",
+    "login": "jltomy",
+    "displayName": "JLTomy",
+    "gameFilter": "",
+    "quality": "best",
+    "facecam": {
+      "h": 0.2093,
+      "w": 0.2135,
+      "x": 0.0161,
+      "y": 0.4204
+    }
+  },
+  {
+    "platform": "TWITCH",
+    "login": "anyme023",
+    "displayName": "Anyme",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": {
+      "h": 0.257,
+      "w": 0.256,
+      "x": 0.742,
+      "y": 0.154
+    }
+  },
+  {
+    "platform": "TWITCH",
+    "login": "kamet0",
+    "displayName": "Kameto",
+    "gameFilter": "",
+    "quality": "best",
+    "facecam": {
+      "h": 0.211,
+      "w": 0.21,
+      "x": 0.79,
+      "y": 0.163
+    }
+  },
+  {
+    "platform": "TWITCH",
+    "login": "michou",
+    "displayName": "Michou",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": {
+      "h": 0.211,
+      "w": 0.211,
+      "x": 0.005,
+      "y": 0.413
+    }
+  },
+  {
+    "platform": "TWITCH",
+    "login": "mistermv",
+    "displayName": "MisterMV",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "zerator",
+    "displayName": "ZeratoR",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "ponce",
+    "displayName": "Ponce",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "domingo",
+    "displayName": "Domingo",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "locklear",
+    "displayName": "Locklear",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "inoxtag",
+    "displayName": "Inoxtag",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "lebouseuh",
+    "displayName": "Lebouseuh",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "etoiles",
+    "displayName": "Etoiles",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  },
+  {
+    "platform": "TWITCH",
+    "login": "aminematue",
+    "displayName": "AmineMaTue",
+    "gameFilter": "GTA 6",
+    "quality": "best",
+    "facecam": null
+  }
+]

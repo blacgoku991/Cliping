@@ -50,6 +50,23 @@ Pour tester sans attendre un live, colle le lien d'un replay dans **Streamers �
 
 Une fois ton compte créé, mets `ALLOW_SIGNUP="false"` dans `.env` puis `docker compose up -d` si tu es le seul utilisateur.
 
+### Installation en une commande (serveur Ubuntu 24.04)
+
+Loue un serveur (4 cœurs, 8 Go de mémoire), fais pointer ton nom de domaine vers son adresse IP, puis dans sa console :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/blacgoku991/Cliping/claude/gifted-mayer-f5vxyz/scripts/install-serveur.sh \
+  | sudo bash -s -- clips.mondomaine.fr
+```
+
+Le script installe Docker, récupère Cliping, tire les secrets au hasard sur le serveur (`ENCRYPTION_KEY`, mot de passe de la base), règle `APP_URL` et `DOMAIN`, et lance tout avec HTTPS et la transcription des sous-titres. Ensuite :
+
+1. ouvre `https://clips.mondomaine.fr` et crée ton compte (email et mot de passe de ton choix) ;
+2. ferme les inscriptions : `sudo bash /opt/cliping/scripts/install-serveur.sh --fermer-inscriptions` ;
+3. ajoute d'un coup les chaînes GTA 6 FR déjà préparées, webcams placées : `cd /opt/cliping && sudo docker compose exec worker node_modules/.bin/tsx scripts/import-chaines.ts ton@email.fr` (liste dans `scripts/chaines-gta6-fr.json`).
+
+Relancer la commande d'installation met Cliping à jour en gardant les données et les secrets.
+
 ## D'où viennent les clips
 
 - **Lives suivis** : Twitch, Kick, YouTube et **TikTok Live** (`tiktok.com/@pseudo`). Sur YouTube et TikTok, qui n'affichent pas de catégorie, le filtre de jeu est cherché dans le titre du live.
@@ -161,7 +178,7 @@ Les deux sont facultatifs. Sans transcription, les clips sortent sans sous-titre
 | Fonction | Variables | Remarque |
 |---|---|---|
 | Titres, accroches, hashtags, note de potentiel | `ANTHROPIC_API_KEY` | Modèle par défaut `claude-opus-5-5`. Pour de gros volumes, `AI_MODEL="claude-haiku-5-5"` coûte beaucoup moins cher. Le repli automatique vers un autre modèle en cas de refus est activé (sauf Haiku, qui ne le propose pas). |
-| Sous-titres mot à mot | `TRANSCRIBE_API_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | Toute API compatible OpenAI : OpenAI (`whisper-1`), Groq (`whisper-large-v3-turbo`)… Quelques centimes pour des centaines de clips. Ou **gratuit, sur ta machine** : `scripts/whisper-setup.sh` installe faster-whisper (modèle `large-v3-turbo`, ~1,6 Go téléchargé au premier lancement), `scripts/whisper-server.py` sert la même API sur `http://127.0.0.1:8770/v1` (clé : n'importe quoi, par ex. `local`). Environ 5 s de calcul pour une minute d'audio sur 4 cœurs. `scripts/dev-up.sh reel` le démarre tout seul quand il est installé. |
+| Sous-titres mot à mot | `TRANSCRIBE_API_URL`, `TRANSCRIBE_API_KEY`, `TRANSCRIBE_MODEL` | Toute API compatible OpenAI : OpenAI (`whisper-1`), Groq (`whisper-large-v3-turbo`)… Quelques centimes pour des centaines de clips. Ou **gratuit, sur ta machine** : `scripts/whisper-setup.sh` installe faster-whisper (modèle `large-v3-turbo`, ~1,6 Go téléchargé au premier lancement), `scripts/whisper-server.py` sert la même API sur `http://127.0.0.1:8770/v1` (clé : n'importe quoi, par ex. `local`). Environ 5 s de calcul pour une minute d'audio sur 4 cœurs. `scripts/dev-up.sh reel` le démarre tout seul quand il est installé ; avec Docker, c'est le service `whisper` de `docker-compose.yml`, utilisé par défaut quand aucune autre API n'est réglée. |
 
 **Sans IA**, les titres ne sont plus génériques dès que la transcription marche : le bot choisit dans l'extrait la phrase du streamer la plus forte près du moment fort (courte, lisible en une seconde, une exclamation, une question, un nom propre ou un mot qui fait la chute ; jamais d'insulte ni les génériques que Whisper invente sur du silence) et s'en sert, entre guillemets, comme accroche à l'écran et dans le titre avec le nom du streamer et du jeu (« « Je te kiffe de dingue » 🤯 Squeezie sur GTA 6 »). Rien n'est reformulé ni inventé.
 
@@ -247,6 +264,7 @@ Vérifié de bout en bout sur un faux live rejoué en temps réel (voir `tests/e
 - les envois vers YouTube et TikTok (compilations et miniatures comprises) : le code suit leur documentation et l'enchaînement des appels est testé contre un réseau simulé, mais aucune vraie vidéo n'a été publiée. Seuls les refus ont été observés sur les vrais serveurs de Google (identifiants invalides → message « reconnecte le compte ») ; TikTok n'était pas joignable ;
 - l'appel à Claude (titres, accroches avec images du clip, kit de publication, bios, compilations) et aux API de transcription payantes (OpenAI, Groq) : aucune clé valide dans l'environnement de développement. Les replis sans IA et la transcription locale (faster-whisper) ont, eux, tourné sur de vrais lives ;
 - le relevé des performances contre de vrais comptes YouTube ou TikTok (testé contre un réseau simulé et des données fictives) ;
+- `scripts/install-serveur.sh` et l'image Docker `whisper` : écrits pour Ubuntu 24.04 mais jamais lancés sur un vrai serveur (pas de Docker dans l'environnement de développement ; seule la préparation de `.env` a été essayée à blanc) ;
 - l'installation de l'app sur un vrai iPhone, et le mode validation au doigt dans Safari (testés dans un navigateur de bureau qui simule un mobile) ;
 - les seuils de coupe des temps morts et de détection sur de vrais streams et de la vraie parole (calés sur des signaux de synthèse) ;
 - la capture de TikTok Live (plugin `tiktok` de streamlink 8.6, fragile car TikTok change souvent son site) et le téléchargement de vrais clips Twitch/Kick/TikTok/Shorts par yt-dlp (extracteurs présents dans la version installée, mais sites injoignables ici). L'import d'un clip court a été vérifié de bout en bout avec des fichiers servis localement ;
